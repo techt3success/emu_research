@@ -69,9 +69,9 @@ jobs:
 
       - name: Sync (skipped if cache restored)
         id: sync
-        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           cd "$HOME/aosp"
+          if [ -f build/envsetup.sh ]; then echo "source already present (cache restored) — skipping sync"; exit 0; fi
           repo sync -c -j16 --fail-fast 2>&1 | tail -20
           test -f build/envsetup.sh || { echo "SYNC INCOMPLETE"; exit 1; }
           df -h /
