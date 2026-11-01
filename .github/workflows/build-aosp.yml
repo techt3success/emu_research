@@ -198,13 +198,17 @@ jobs:
           # vendor/qcom/opensource/commonsys-intf/display does not exist").
           # The emulator product never builds them — drop the dirs.
           rm -rf hardware/qcom-caf hardware/qcom
-          # cts_defaults lives in platform/cts (trimmed); remaining test trees
-          # referencing it break soong's global Android.bp parse — remove them
-          rm -rf test/cts-root test/suite_harness platform_testing                  packages/modules/Connectivity/tests                  packages/modules/Connectivity/nearby/tests                  packages/modules/Connectivity/networksecurity/tests
-          # terminal blow for this error class: sweep EVERY Android.bp that
-          # references CTS/MTS test defaults and remove its directory
-          grep -rl --include=Android.bp --exclude-dir=.repo             -E '"cts_defaults"|"mts-target-sdk-version-current"|"framework-connectivity-test-defaults"|"cts_error_prone_rules"|"cts_support_defaults"' .             | xargs -r -n1 dirname | sort -u | xargs -r rm -rf
-          echo "cts-defaults sweep done: remaining refs = $(grep -rl --include=Android.bp --exclude-dir=.repo -E 'cts_defaults|mts-target-sdk' . | wc -l)"
+          # cts_defaults / cts_error_prone_rules / mts-target-sdk-version-current
+          # are DEFINED in platform/cts (trimmed from snapshot). The sweep
+          # approach cascaded (swept dirs define other defaults) — restore the
+          # definer instead: clone cts from the mirror at build time.
+          if [ ! -d platform/cts ]; then
+            MIRROR=""
+            for m in https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/ https://mirrors.ustc.edu.cn/aosp/; do
+              timeout 20 git ls-remote "${m}platform/cts" HEAD >/dev/null 2>&1 && { MIRROR="$m"; break; }
+            done
+            [ -n "$MIRROR" ] && git clone -q --depth=1 "${MIRROR}platform/cts" platform/cts               && echo "cts cloned from $MIRROR" || echo "WARN: cts clone failed — soong errors may return"
+          fi
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
           if [ "$REMAIN" -lt 4200 ]; then
