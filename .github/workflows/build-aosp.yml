@@ -207,6 +207,11 @@ jobs:
             # NOT AOSP main (trendy_team_* modules don't exist at 22.2) — run-16 lesson
             git clone -q --depth=1 -b lineage-22.2 https://github.com/LineageOS/android_cts platform/cts               && echo "cts cloned: LineageOS/android_cts lineage-22.2"               || { echo "lineage cts clone failed — falling back to tuna tag";                    git clone -q --depth=1 -b android-15.0.0_r1                      https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/cts platform/cts                    && echo "cts cloned: tuna android-15.0.0_r1"                    || echo "WARN: cts clone failed — soong errors may return"; }
           fi
+          if [ ! -d test/vts ]; then
+            # vts defines vndk_utils/vts_kernel_utils/vts_vndk_utils +
+            # libvts_vintf_test_common (needed by system/libvintf itself)
+            git clone -q --depth=1 -b lineage-22.2 https://github.com/LineageOS/android_vts test/vts               && echo "vts cloned: lineage-22.2"               || { git clone -q --depth=1 -b android-15.0.0_r1                      https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/test/vts test/vts                    && echo "vts cloned: tuna r1" || echo "WARN: vts clone failed"; }
+          fi
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
           if [ "$REMAIN" -lt 4200 ]; then
