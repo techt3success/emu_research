@@ -190,7 +190,8 @@ jobs:
       - name: Build emulator product
         id: build
         run: |
-          set -uo pipefail
+          # NO -u: envsetup.sh reads $TOP before defining it (set -u kills AOSP shell setup)
+          set -o pipefail
           cd "$HOME/aosp"
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
