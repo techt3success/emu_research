@@ -131,10 +131,13 @@ jobs:
                  echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0; }
           OK=1
           for p in build/envsetup.sh prebuilts/go/linux-x86/bin/go \
-                   prebuilts/clang/host/linux-x86/bin/clang \
                    frameworks/base/Android.bp \
                    device/generic/goldfish/AndroidProducts.mk; do
             [ -e "$HOME/aosp/$p" ] || { echo "post-restore sentinel missing: $p"; OK=0; }
+          done
+          # clang lives in versioned dirs (run-12 lesson) — same check as chunked_sync.sh
+          ls -d "$HOME/aosp"/prebuilts/clang/host/linux-x86/clang-r*/bin/clang >/dev/null 2>&1 \
+            || { echo "post-restore sentinel missing: clang-r*/bin/clang"; OK=0; }
           done
           if [ "$OK" = 1 ]; then
             echo "restored=true" >> "$GITHUB_OUTPUT"
