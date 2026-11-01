@@ -198,6 +198,9 @@ jobs:
           # vendor/qcom/opensource/commonsys-intf/display does not exist").
           # The emulator product never builds them — drop the dirs.
           rm -rf hardware/qcom-caf hardware/qcom
+          # cts_defaults lives in platform/cts (trimmed); remaining test trees
+          # referencing it break soong's global Android.bp parse — remove them
+          rm -rf test/cts-root test/suite_harness platform_testing                  packages/modules/Connectivity/tests                  packages/modules/Connectivity/nearby/tests                  packages/modules/Connectivity/networksecurity/tests
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
           if [ "$REMAIN" -lt 4200 ]; then
