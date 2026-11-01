@@ -1,0 +1,143 @@
+name: AOSP emulator image build (from source)
+
+on:
+  push:
+    branches: [main]
+    paths: ['.github/workflows/build-aosp.yml', 'TRIGGER']
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 355
+    steps:
+      - name: Checkout (workflow only)
+        uses: actions/checkout@v4
+
+      - name: Reclaim runner disk
+        run: |
+          set +e
+          sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache /usr/share/dotnet \
+                      /usr/local/share/boost /usr/lib/jvm /usr/share/swift \
+                      /usr/local/.ghcup /imagepack /mnt /usr/share/miniconda \
+                      /usr/share/az_* /usr/local/lib/node_modules 2>/dev/null
+          sudo docker image prune -af >/dev/null 2>&1
+          sudo apt-get clean
+          df -h /
+
+      - name: Install build deps + repo tool
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq git gnupg flex bison build-essential zip curl \
+            zlib1g-dev libncurses6 x11proto-core-dev libx11-dev lib32z1-dev \
+            libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig rsync ccache \
+            libssl-dev libreadline-dev
+          mkdir -p "$HOME/bin"
+          curl -sSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
+          chmod a+x "$HOME/bin/repo"
+          echo "$HOME/bin" >> "$GITHUB_PATH"
+
+      - name: Configure git
+        run: |
+          git config --global user.name  "cloud-builder"
+          git config --global user.email "cloud-builder@ci.local"
+          git config --global color.ui false
+          git config --global trace2.eventTarget false
+
+      - name: Init AOSP manifest (android-15, partial shallow)
+        run: |
+          mkdir -p "$HOME/aosp" && cd "$HOME/aosp"
+          repo init -u https://android.googlesource.com/platform/manifest \
+                    -b android-15.0.0_r1 \
+                    --partial-clone --clone-filter=blob:limit=500k --depth=1 \
+                    -g default,-darwin,-windows \
+                    --no-repo-verify 2>&1 | tail -5
+          mkdir -p .repo/local_manifests
+          cat > .repo/local_manifests/trim.xml <<'EOF'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <manifest>
+            <!-- not needed to build the emulator product -->
+            <remove-project name="platform/cts" />
+            <remove-project name="platform/developers" />
+            <remove-project name="platform/docs/source.android.com" />
+            <remove-project name="platform/tools/idea" />
+            <remove-project name="platform/test/vts" />
+            <remove-project name="device/linaro/dragonboard" />
+            <remove-project name="device/linaro/hikey" />
+            <remove-project name="device/linaro/hikey-kernel" />
+            <remove-project name="device/linaro/poplar" />
+            <remove-project name="device/linaro/bootloader/OpenPlatformPkg" />
+            <remove-project name="device/linaro/bootloader/edk2" />
+            <remove-project name="device/linaro/bootloader/arm-trusted-firmware" />
+          </manifest>
+          EOF
+          df -h /
+
+      - name: Restore source cache (if a previous run uploaded it)
+        id: cache
+        continue-on-error: true
+        uses: actions/cache/restore@v4
+        with:
+          path: ~/aosp
+          key: aosp15-src-v1
+          restore-keys: aosp15-src-v1
+
+      - name: Sync (skipped if cache restored)
+        if: steps.cache.outcome != 'success'
+        run: |
+          cd "$HOME/aosp"
+          repo sync -c -j8 --fail-fast 2>&1 | tail -20
+          df -h /
+          du -sh "$HOME/aosp"
+
+      - name: Save source cache for resumed runs
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: ~/aosp
+          key: aosp15-src-v1
+
+      - name: Build emulator product
+        run: |
+          cd "$HOME/aosp"
+          source build/envsetup.sh
+          lunch sdk_phone64_x86_64-userdebug
+          ( m -j4 ) 2>&1 | tee build.log | tail -30
+          df -h /
+
+      - name: Collect images
+        if: always()
+        run: |
+          OUTDIR=$(find "$HOME/aosp/out/target/product" -maxdepth 1 -type d | grep -v '^.*product$' | head -1)
+          echo "Product out dir: $OUTDIR"
+          ls -la "$OUTDIR"
+          mkdir -p "$HOME/images"
+          for f in system.img vendor.img product.img system_ext.img ramdisk.img boot.img vendor_boot.img init_boot.img; do
+            [ -f "$OUTDIR/$f" ] && cp "$OUTDIR/$f" "$HOME/images/" || true
+          done
+          cd "$HOME/images" && gzip -kf *.img 2>/dev/null || true
+          ls -la "$HOME/images"
+
+      - name: Release images
+        if: success()
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: aosp15-emu-v0.${{ github.run_number }}
+          name: AOSP 15 emulator images (build ${{ github.run_number }})
+          body: |
+            Built from source: android-15.0.0_r1, product sdk_phone64_x86_64-userdebug.
+            Boot: replace AVD image files with these (system/vendor/product/system_ext .img)
+            + use ramdisk/boot for Magisk patching (Fortress-Lite pipeline).
+          files: |
+            /home/runner/images/*.img.gz
+
+      - name: Upload build log on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: build-log-${{ github.run_number }}
+          path: |
+            /home/runner/aosp/build.log
+            /home/runner/aosp/out/error.log
+          retention-days: 14
+          if-no-files-found: ignore
