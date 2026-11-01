@@ -54,25 +54,8 @@ jobs:
                     --partial-clone --clone-filter=blob:limit=500k --depth=1 \
                     -g default,-darwin,-windows \
                     --no-repo-verify 2>&1 | tail -5
-          mkdir -p .repo/local_manifests
-          cat > .repo/local_manifests/trim.xml <<'EOF'
-          <?xml version="1.0" encoding="UTF-8"?>
-          <manifest>
-            <!-- not needed to build the emulator product -->
-            <remove-project name="platform/cts" />
-            <remove-project name="platform/developers" />
-            <remove-project name="platform/docs/source.android.com" />
-            <remove-project name="platform/tools/idea" />
-            <remove-project name="platform/test/vts" />
-            <remove-project name="device/linaro/dragonboard" />
-            <remove-project name="device/linaro/hikey" />
-            <remove-project name="device/linaro/hikey-kernel" />
-            <remove-project name="device/linaro/poplar" />
-            <remove-project name="device/linaro/bootloader/OpenPlatformPkg" />
-            <remove-project name="device/linaro/bootloader/edk2" />
-            <remove-project name="device/linaro/bootloader/arm-trusted-firmware" />
-          </manifest>
-          EOF
+          # no local_manifest trim: runner has 121G+ free, trimming risks
+          # remove-project errors on renamed/missing projects
           df -h /
 
       - name: Restore source cache (if a previous run uploaded it)
@@ -81,23 +64,25 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v2
-          restore-keys: aosp15-src-v2
+          key: aosp15-src-v3
+          restore-keys: aosp15-src-v3
 
       - name: Sync (skipped if cache restored)
+        id: sync
         if: steps.cache.outputs.cache-hit != 'true'
         run: |
           cd "$HOME/aosp"
           repo sync -c -j16 --fail-fast 2>&1 | tail -20
+          test -f build/envsetup.sh || { echo "SYNC INCOMPLETE"; exit 1; }
           df -h /
           du -sh "$HOME/aosp"
 
-      - name: Save source cache for resumed runs
-        if: always()
+      - name: Save source cache for resumed runs (only after successful sync)
+        if: always() && steps.sync.outcome == 'success'
         uses: actions/cache/save@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v2-${{ github.run_number }}
+          key: aosp15-src-v3-${{ github.run_number }}
 
       - name: Build emulator product
         run: |
@@ -110,8 +95,9 @@ jobs:
       - name: Collect images
         if: always()
         run: |
-          OUTDIR=$(find "$HOME/aosp/out/target/product" -maxdepth 1 -type d | grep -v '^.*product$' | head -1)
+          OUTDIR=$(ls -d "$HOME/aosp/out/target/product"/*/ 2>/dev/null | head -1)
           echo "Product out dir: $OUTDIR"
+          [ -z "$OUTDIR" ] && { echo "no product out dir"; ls -R "$HOME/aosp/out/target" 2>/dev/null | head; exit 1; }
           ls -la "$OUTDIR"
           mkdir -p "$HOME/images"
           for f in system.img vendor.img product.img system_ext.img ramdisk.img boot.img vendor_boot.img init_boot.img; do
