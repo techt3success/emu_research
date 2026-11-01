@@ -190,7 +190,18 @@ def main():
         if any(path == t or path.startswith(t) for t in TRIM_PREFIXES):
             trimmed.append(path)
             del projects[path]
-    print("trimmed: %d projects -> %d remain" % (len(trimmed), len(projects)))
+    # projects in the notdefault group are darwin/unsupported-host prebuilts;
+    # plain `repo sync` excludes them, and an explicit-path `repo sync <path>`
+    # HARD-ERRORS on them ("project group must be enabled") -> drop them here
+    # (run 4 lesson, rediscovered at chunk-02 of run 12)
+    notdefault = []
+    for path in list(projects):
+        groups = projects[path].get("groups", "") or ""
+        if "notdefault" in groups.split(","):
+            notdefault.append(path)
+            del projects[path]
+    print("trimmed: %d projects, notdefault-grouped: %d -> %d remain" %
+          (len(trimmed), len(notdefault), len(projects)))
 
     # --- remotes rewrite ------------------------------------------------------
     out_remotes = []
