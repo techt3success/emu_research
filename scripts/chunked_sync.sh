@@ -39,16 +39,20 @@ free_gb() { df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'; }
 SENTINELS=(
   build/envsetup.sh
   prebuilts/go/linux-x86/bin/go
-  prebuilts/clang/host/linux-x86/bin/clang
   frameworks/base/Android.bp
   device/generic/goldfish/AndroidProducts.mk
 )
-
+# run-12 lesson: clang lives in versioned dirs on A14/Lineage (no top-level
+# bin/clang); check for any clang-r*/bin/clang instead
+check_clang() {
+  ls -d "$AOSP_DIR"/prebuilts/clang/host/linux-x86/clang-r*/bin/clang >/dev/null 2>&1
+}
 source_complete() {
   local p
   for p in "${SENTINELS[@]}"; do
     [ -e "$AOSP_DIR/$p" ] || return 1
   done
+  check_clang || return 1
   return 0
 }
 
@@ -176,6 +180,7 @@ done
 for p in "${SENTINELS[@]}"; do
   [ -e "$AOSP_DIR/$p" ] || die "sync finished but sentinel missing: $p"
 done
+check_clang || die "sync finished but clang toolchain missing (clang-r*/bin/clang)"
 touch "$CHUNK_MARK_DIR/.all_done"
 log "ALL CHUNKS DONE: $(free_gb)G free, tree $(du -sh --exclude=.repo "$AOSP_DIR" 2>/dev/null | cut -f1), .repo $(du -sh "$AOSP_DIR/.repo" 2>/dev/null | cut -f1)"
 echo "synced=true" >> "${GITHUB_OUTPUT:-/dev/null}"
