@@ -134,6 +134,7 @@ def load_manifest_dir(manifest_dir):
     seen = set()
 
     def load(apath, base):
+        nonlocal default_el
         if apath in seen:
             return
         seen.add(apath)
@@ -233,8 +234,11 @@ def main():
     if len(p2) != len(projects):
         sys.exit("FATAL: emitted manifest re-parses to %d projects (expected %d)"
                  % (len(p2), len(projects)))
+    if d2 is None or not d2.get("remote"):
+        sys.exit("FATAL: emitted manifest has no <default remote=...> — every "
+                 "project without an explicit remote would be rejected by repo")
     for p, el in p2.items():
-        rem = el.get("remote") or (d2.get("remote") if d2 is not None else None)
+        rem = el.get("remote") or d2.get("remote")
         if rem and rem not in r2:
             sys.exit("FATAL: project %s references unknown remote %s" % (p, rem))
 
