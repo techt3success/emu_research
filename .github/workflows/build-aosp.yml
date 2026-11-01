@@ -81,10 +81,14 @@ jobs:
             echo "no source snapshot yet — fresh chunked sync will run"
             echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
-          RELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG")
+          RELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG") \
+            || { echo "DIAG: gh api failed (rc=$?)"; exit 1; }
+          echo "DIAG: gh api ok, $(echo "$RELEASE" | jq '.assets | length') assets"
           # name<TAB>api-url for every asset, sorted (part-aa < part-ab ...)
-          echo "$RELEASE" | jq -r '.assets | sort_by(.name) | .[] | "\(.name)\t\(.url)"' > /tmp/snap.assets
-          META_URL=$(grep -P "^snap\.meta\t" /tmp/snap.assets | cut -f2)
+          echo "$RELEASE" | jq -r '.assets | sort_by(.name) | .[] | "\(.name)\t\(.url)"' > /tmp/snap.assets \
+            || { echo "DIAG: jq parse failed (jq: $(command -v jq || echo MISSING))"; exit 1; }
+          META_URL=$(grep -P "^snap\.meta\t" /tmp/snap.assets | cut -f2) || true
+          echo "DIAG: META_URL=${META_URL:+set}${META_URL:-EMPTY}"
           if [ -z "$META_URL" ]; then
             # run-14 rescue: 15 parts exist but meta upload died — the asset
             # list itself is trustworthy (parts uploaded+deleted atomically),
