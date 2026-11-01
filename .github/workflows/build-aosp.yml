@@ -63,16 +63,26 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v4
-          restore-keys: aosp15-src-v4
+          key: aosp15-src-v5
+          restore-keys: aosp15-src-v5
 
-      - name: Sync (skipped if cache restored)
+      - name: Sync (skipped if complete source restored)
         id: sync
         run: |
           cd "$HOME/aosp"
-          if [ -f build/envsetup.sh ]; then echo "source already present (cache restored) — skipping sync"; exit 0; fi
-          repo sync -c -j16 --fail-fast 2>&1 | tail -20
-          test -f build/envsetup.sh || { echo "SYNC INCOMPLETE"; exit 1; }
+          if [ -f build/envsetup.sh ] && [ -x prebuilts/go/linux-x86/bin/go ]; then
+            echo "source complete (cache restored) — skipping sync"; exit 0
+          fi
+          set -o pipefail
+          rc=1
+          for i in 1 2 3; do
+            echo "=== repo sync attempt $i ==="
+            if repo sync -c -j4 --fail-fast > sync.log 2>&1; then rc=0; break; fi
+            echo "attempt $i failed:"; grep -m5 -E "error:|RESOURCE_EXHAUSTED|exhausted|failed" sync.log || tail -5 sync.log
+            [ "$i" -lt 3 ] && { echo "backing off 90s (googlesource quota)"; sleep 90; }
+          done
+          [ "$rc" -ne 0 ] && { tail -20 sync.log; exit 1; }
+          test -f build/envsetup.sh && test -x prebuilts/go/linux-x86/bin/go || { echo "SYNC INCOMPLETE (go missing)"; exit 1; }
           df -h /
           du -sh "$HOME/aosp"
 
@@ -81,7 +91,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v4-${{ github.run_number }}
+          key: aosp15-src-v5-${{ github.run_number }}
 
       - name: Build emulator product
         run: |
