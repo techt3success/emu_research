@@ -138,7 +138,6 @@ jobs:
           # clang lives in versioned dirs (run-12 lesson) — same check as chunked_sync.sh
           ls -d "$HOME/aosp"/prebuilts/clang/host/linux-x86/clang-r*/bin/clang >/dev/null 2>&1 \
             || { echo "post-restore sentinel missing: clang-r*/bin/clang"; OK=0; }
-          done
           if [ "$OK" = 1 ]; then
             echo "restored=true" >> "$GITHUB_OUTPUT"
             df -h /
