@@ -52,7 +52,6 @@ jobs:
           repo init -u https://android.googlesource.com/platform/manifest \
                     -b android-15.0.0_r1 \
                     --partial-clone --clone-filter=blob:limit=500k --depth=1 \
-                    -g default,-darwin,-windows \
                     --no-repo-verify 2>&1 | tail -5
           # no local_manifest trim: runner has 121G+ free, trimming risks
           # remove-project errors on renamed/missing projects
@@ -64,8 +63,8 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v3
-          restore-keys: aosp15-src-v3
+          key: aosp15-src-v4
+          restore-keys: aosp15-src-v4
 
       - name: Sync (skipped if cache restored)
         id: sync
@@ -82,7 +81,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v3-${{ github.run_number }}
+          key: aosp15-src-v4-${{ github.run_number }}
 
       - name: Build emulator product
         run: |
