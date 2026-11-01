@@ -1,10 +1,30 @@
 name: AOSP emulator image build (from source)
 
+# WALL 1 fix (runs 5/6/7/8: googlesource RESOURCE_EXHAUSTED):
+#   source comes from LineageOS' GitHub manifest rewritten by
+#   scripts/gen_manifest.py — every android.googlesource.com remote is
+#   pointed at the Tsinghua TUNA full AOSP mirror (USTC fallback), picked
+#   by an on-runner probe. No googlesource traffic.
+# WALL 2 fix (disk peak 130-147GB vs ~121GB free):
+#   scripts/chunked_sync.sh syncs in ~10 chunks and deletes each chunk's
+#   git stores (.repo/projects + .repo/project-objects) right after its
+#   checkout is verified. Peak = tree + one chunk's store + out/.
+# Persistence (actions/cache is capped at 10GB/repo — a 65GB tree can never
+#   be cached): the post-sync tree is split into ~2GB zstd parts and attached
+#   to the rolling `src-snap-v1` release; later runs stream-restore it.
+
 on:
   push:
     branches: [main]
     paths: ['.github/workflows/build-aosp.yml', 'TRIGGER']
   workflow_dispatch: {}
+
+concurrency:
+  group: aosp-build
+  cancel-in-progress: true
+
+env:
+  SNAP_TAG: src-snap-v1
 
 jobs:
   build:
@@ -13,7 +33,7 @@ jobs:
     permissions:
       contents: write
     steps:
-      - name: Checkout (workflow only)
+      - name: Checkout (workflow + scripts only)
         uses: actions/checkout@v4
 
       - name: Reclaim runner disk
@@ -26,6 +46,7 @@ jobs:
           sudo docker image prune -af >/dev/null 2>&1
           sudo apt-get clean
           df -h /
+          date +%s > "$HOME/.run_start"
 
       - name: Install build deps + repo tool
         run: |
@@ -33,7 +54,7 @@ jobs:
           sudo apt-get install -y -qq git gnupg flex bison build-essential zip curl \
             zlib1g-dev libncurses6 x11proto-core-dev libx11-dev lib32z1-dev \
             libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig rsync ccache \
-            libssl-dev libreadline-dev
+            libssl-dev libreadline-dev zstd
           mkdir -p "$HOME/bin"
           curl -sSL https://storage.googleapis.com/git-repo-downloads/repo -o "$HOME/bin/repo"
           chmod a+x "$HOME/bin/repo"
@@ -46,64 +67,142 @@ jobs:
           git config --global color.ui false
           git config --global trace2.eventTarget false
 
-      - name: Init AOSP manifest (android-15, partial shallow)
+      - name: Restore source snapshot (rolling release assets, streamed)
+        id: restore
         run: |
-          mkdir -p "$HOME/aosp" && cd "$HOME/aosp"
-          repo init -u https://android.googlesource.com/platform/manifest \
-                    -b android-15.0.0_r1 \
-                    --partial-clone --clone-filter=blob:limit=500k --depth=1 \
-                    --no-repo-verify 2>&1 | tail -5
-          # no local_manifest trim: runner has 121G+ free, trimming risks
-          # remove-project errors on renamed/missing projects
-          df -h /
+          set -uo pipefail
+          mkdir -p "$HOME/aosp"
+          RELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG" 2>/dev/null) || true
+          if [ -z "$RELEASE" ]; then
+            echo "no source snapshot yet — fresh chunked sync will run"
+            echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          # name<TAB>api-url for every asset, sorted (part-aa < part-ab ...)
+          echo "$RELEASE" | jq -r '.assets | sort_by(.name) | .[] | "\(.name)\t\(.url)"' > /tmp/snap.assets
+          META_URL=$(grep -P "^snap\.meta\t" /tmp/snap.assets | cut -f2)
+          if [ -z "$META_URL" ]; then
+            echo "no snap.meta in snapshot — fresh chunked sync will run"
+            echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          gh api "$META_URL" -H "Accept: application/octet-stream" > /tmp/snap.meta
+          MISSING=0
+          while read -r part; do
+            [ -z "$part" ] && continue
+            grep -qP "^${part}\t" /tmp/snap.assets || { echo "snapshot missing part: $part"; MISSING=1; }
+          done < /tmp/snap.meta
+          if [ "$MISSING" = 1 ]; then
+            echo "snapshot incomplete — fresh chunked sync will run"
+            echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0
+          fi
+          echo "streaming snapshot restore ($(grep -c . /tmp/snap.meta) parts)..."
+          while read -r part; do
+            [ -z "$part" ] && continue
+            AURL=$(grep -P "^${part}\t" /tmp/snap.assets | cut -f2)
+            gh api "$AURL" -H "Accept: application/octet-stream"
+          done < /tmp/snap.meta \
+            | zstd -dc \
+            | tar -xf - -C "$HOME/aosp" \
+            || { echo "restore failed"; rm -rf "$HOME/aosp";
+                 echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0; }
+          OK=1
+          for p in build/envsetup.sh prebuilts/go/linux-x86/bin/go \
+                   prebuilts/clang/host/linux-x86/bin/clang \
+                   frameworks/base/Android.bp \
+                   device/generic/goldfish/AndroidProducts.mk; do
+            [ -e "$HOME/aosp/$p" ] || { echo "post-restore sentinel missing: $p"; OK=0; }
+          done
+          if [ "$OK" = 1 ]; then
+            echo "restored=true" >> "$GITHUB_OUTPUT"
+            df -h /
+          else
+            rm -rf "$HOME/aosp"; echo "restored=false" >> "$GITHUB_OUTPUT"
+          fi
+        env:
+          GH_TOKEN: ${{ github.token }}
 
-      - name: Restore source cache (if a previous run uploaded it)
-        id: cache
-        continue-on-error: true
-        uses: actions/cache/restore@v4
-        with:
-          path: ~/aosp
-          key: aosp15-src-v5
-          restore-keys: aosp15-src-v5
-
-      - name: Sync (skipped if complete source restored)
+      - name: Chunked sync (mirror-rewritten manifest, per-chunk git-store deletion)
         id: sync
         run: |
           cd "$HOME/aosp"
-          if [ -f build/envsetup.sh ] && [ -x prebuilts/go/linux-x86/bin/go ]; then
-            echo "source complete (cache restored) — skipping sync"; exit 0
-          fi
-          set -o pipefail
-          rc=1
-          for i in 1 2 3; do
-            echo "=== repo sync attempt $i ==="
-            if repo sync -c -j4 --fail-fast > sync.log 2>&1; then rc=0; break; fi
-            echo "attempt $i failed:"; grep -m5 -E "error:|RESOURCE_EXHAUSTED|exhausted|failed" sync.log || tail -5 sync.log
-            [ "$i" -lt 3 ] && { echo "backing off 90s (googlesource quota)"; sleep 90; }
-          done
-          [ "$rc" -ne 0 ] && { tail -20 sync.log; exit 1; }
-          test -f build/envsetup.sh && test -x prebuilts/go/linux-x86/bin/go || { echo "SYNC INCOMPLETE (go missing)"; exit 1; }
+          bash "$GITHUB_WORKSPACE/scripts/chunked_sync.sh"
           df -h /
-          du -sh "$HOME/aosp"
+        env:
+          SYNC_JOBS: "8"
 
-      - name: Save source cache for resumed runs (only after successful sync)
-        if: always() && steps.sync.outcome == 'success'
-        uses: actions/cache/save@v4
-        with:
-          path: ~/aosp
-          key: aosp15-src-v5-${{ github.run_number }}
+      - name: Snapshot source tree to release assets (if we just synced)
+        if: success() && steps.sync.outputs.synced == 'true'
+        run: |
+          set -uo pipefail
+          FREE_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
+          [ "$FREE_GB" -lt 8 ] && { echo "not enough disk to snapshot (${FREE_GB}G free)"; exit 0; }
+          export GH_TOKEN="${{ github.token }}"
+          gh release view "$SNAP_TAG" >/dev/null 2>&1 \
+            || gh release create "$SNAP_TAG" -t "AOSP source snapshot" \
+                 -n "Rolling synced-tree snapshot (git stores stripped). Parts are streamed into ~/aosp by the restore step."
+          echo "snapshotting tree (this is the resume mechanism; actions/cache caps at 10GB)..."
+          tar -C "$HOME/aosp" \
+              --exclude='./out' \
+              --exclude='./.repo/projects' \
+              --exclude='./.repo/project-objects' \
+              --exclude='./.repo/worktrees' \
+              -cf - . \
+            | zstd -T0 -3 \
+            | split -b 1900M \
+                --filter='f="$FILE"; cat >"$f" && gh release upload "$SNAP_TAG" "$f" --clobber; rc=$?; rm -f "$f"; exit $rc' \
+                - snap.tar.zst.part-
+          ls snap.tar.zst.part-* > /tmp/snap.meta
+          gh release upload "$SNAP_TAG" /tmp/snap.meta --clobber
+          echo "snapshot uploaded: $(wc -l < /tmp/snap.meta) parts"
+          df -h /
+        working-directory: ${{ runner.temp }}
 
       - name: Build emulator product
         run: |
+          set -uo pipefail
           cd "$HOME/aosp"
+          START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
+          REMAIN=$(( 350*60 - (NOW-START) ))
+          if [ "$REMAIN" -lt 4200 ]; then
+            echo "only ${REMAIN}s left of the job budget — deferring build to the next run (snapshot already saved)."
+            touch "$HOME/.build_deferred"
+            exit 0
+          fi
           source build/envsetup.sh
-          lunch sdk_phone64_x86_64-trunk_staging-userdebug
-          ( m -j4 ) 2>&1 | tee build.log | tail -30
-          df -h /
+          TARGET=""
+          for t in sdk_phone64_x86_64-trunk_staging-userdebug \
+                   sdk_phone64_x86_64-userdebug \
+                   sdk_phone64_x86_64-trunk_staging-eng; do
+            echo "trying lunch $t"
+            if lunch "$t" > lunch.log 2>&1; then TARGET="$t"; break; fi
+            tail -5 lunch.log || true
+          done
+          [ -n "$TARGET" ] || { echo "NO VALID LUNCH TARGET"; exit 1; }
+          echo "=== BUILD START: $TARGET at $(date -u)"; df -h /
+          ( m -j4 > build.log 2>&1; echo $? > build.rc ) &
+          MPID=$!
+          NINJA_SEEN=0
+          while kill -0 "$MPID" 2>/dev/null; do
+            sleep 120
+            [ -f build.log ] || continue
+            if [ "$NINJA_SEEN" = 0 ] && grep -q "ninja: Entering directory" build.log; then
+              echo "=== NINJA COMPILATION STARTED at $(date -u) ==="; NINJA_SEEN=1
+            fi
+            grep -E "^\[ " build.log | tail -1 || true
+            df -h / | tail -1
+          done
+          wait "$MPID" || true
+          RC=$(cat build.rc 2>/dev/null || echo 1)
+          echo "=== m finished rc=$RC at $(date -u)"
+          tail -25 build.log
+          exit "$RC"
 
       - name: Collect images
         if: always()
         run: |
+          # a time-deferred build is a success path: no out/ expected
+          if [ ! -d "$HOME/aosp/out/target" ] && [ -f "$HOME/.build_deferred" ]; then
+            echo "build deferred to next run — nothing to collect"; exit 0
+          fi
           OUTDIR=$(ls -d "$HOME/aosp/out/target/product"/*/ 2>/dev/null | head -1)
           echo "Product out dir: $OUTDIR"
           [ -z "$OUTDIR" ] && { echo "no product out dir"; ls -R "$HOME/aosp/out/target" 2>/dev/null | head; exit 1; }
@@ -115,20 +214,31 @@ jobs:
           cd "$HOME/images" && gzip -kf *.img 2>/dev/null || true
           ls -la "$HOME/images"
 
+      - name: Images present?
+        id: imgs
+        if: always()
+        run: |
+          if ls "$HOME/images"/*.img.gz >/dev/null 2>&1; then
+            echo "present=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "present=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Release images
-        if: success()
+        if: success() && steps.imgs.outputs.present == 'true'
         uses: softprops/action-gh-release@v2
         with:
           tag_name: aosp15-emu-v0.${{ github.run_number }}
           name: AOSP 15 emulator images (build ${{ github.run_number }})
           body: |
-            Built from source: android-15.0.0_r1, product sdk_phone64_x86_64-userdebug.
+            Built from source: LineageOS lineage-22.2 tree (A15), mirror-synced
+            (no googlesource), product sdk_phone64_x86_64-userdebug.
             Boot: replace AVD image files with these (system/vendor/product/system_ext .img)
             + use ramdisk/boot for Magisk patching (Fortress-Lite pipeline).
           files: |
             /home/runner/images/*.img.gz
 
-      - name: Upload build log on failure
+      - name: Upload logs on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
@@ -136,5 +246,7 @@ jobs:
           path: |
             /home/runner/aosp/build.log
             /home/runner/aosp/out/error.log
+            /home/runner/aosp/sync-chunk-*.log
+            /home/runner/aosp/lunch.log
           retention-days: 14
           if-no-files-found: ignore
