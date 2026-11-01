@@ -72,11 +72,12 @@ jobs:
         run: |
           set -uo pipefail
           mkdir -p "$HOME/aosp"
-          RELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG" 2>/dev/null) || true
-          if [ -z "$RELEASE" ]; then
+          # gh api prints the 404 error JSON on stdout -> use gh release view for existence
+          if ! gh release view "$SNAP_TAG" >/dev/null 2>&1; then
             echo "no source snapshot yet — fresh chunked sync will run"
             echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0
           fi
+          RELEASE=$(gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG")
           # name<TAB>api-url for every asset, sorted (part-aa < part-ab ...)
           echo "$RELEASE" | jq -r '.assets | sort_by(.name) | .[] | "\(.name)\t\(.url)"' > /tmp/snap.assets
           META_URL=$(grep -P "^snap\.meta\t" /tmp/snap.assets | cut -f2)
@@ -157,6 +158,7 @@ jobs:
         working-directory: ${{ runner.temp }}
 
       - name: Build emulator product
+        id: build
         run: |
           set -uo pipefail
           cd "$HOME/aosp"
@@ -197,7 +199,7 @@ jobs:
           exit "$RC"
 
       - name: Collect images
-        if: always()
+        if: always() && steps.build.outcome != 'skipped'
         run: |
           # a time-deferred build is a success path: no out/ expected
           if [ ! -d "$HOME/aosp/out/target" ] && [ -f "$HOME/.build_deferred" ]; then

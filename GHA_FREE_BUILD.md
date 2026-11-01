@@ -85,7 +85,8 @@ piped into `zstd -dc | tar -x` — no extra disk. Integrity via `snap.meta`
 | Run | What | Result / cause |
 |---|---|---|
 | 1-8 | googlesource `android-15.0.0_r1` direct sync | quota (RESOURCE_EXHAUSTED), disk peaks, group-filter and trim-manifest breakage — full history in goal.md Frontier |
-| 9 | mirror rework: LineageOS 22.2 + TUNA rewrite, chunked sync w/ per-chunk store deletion, release-asset snapshot | *pending — filled in below as attempts land* |
+| 9 | mirror rework: LineageOS 22.2 + TUNA rewrite, chunked sync, release-asset snapshot | FAILED at restore (3 min): `gh api` prints the 404 error JSON **on stdout**, so the `RELEASE` existence check saw non-empty `{"message":"Not Found"}` and jq died (`Cannot iterate over null`) — restore step had no snapshot to restore yet. Cascade: sync skipped, collect step failed the job (no out/ + build step skipped). Fixes: existence via `gh release view`; build step gets `id: build`; collect runs only when build wasn't skipped. (Disk verified 145G/121G free after reclaim ✓) |
+| 10 | same pipeline, restore check fixed | *pending* |
 
 ## Success criterion
 
