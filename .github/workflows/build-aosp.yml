@@ -81,14 +81,14 @@ jobs:
         uses: actions/cache/restore@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v1
-          restore-keys: aosp15-src-v1
+          key: aosp15-src-v2
+          restore-keys: aosp15-src-v2
 
       - name: Sync (skipped if cache restored)
-        if: steps.cache.outcome != 'success'
+        if: steps.cache.outputs.cache-hit != 'true'
         run: |
           cd "$HOME/aosp"
-          repo sync -c -j8 --fail-fast 2>&1 | tail -20
+          repo sync -c -j16 --fail-fast 2>&1 | tail -20
           df -h /
           du -sh "$HOME/aosp"
 
@@ -97,7 +97,7 @@ jobs:
         uses: actions/cache/save@v4
         with:
           path: ~/aosp
-          key: aosp15-src-v1
+          key: aosp15-src-v2-${{ github.run_number }}
 
       - name: Build emulator product
         run: |
