@@ -32,7 +32,7 @@ MIRRORS=(
   "https://mirrors.ustc.edu.cn/aosp/"
 )
 
-log()  { echo "[chunked-sync] $*"; }
+log()  { echo "[chunked-sync] $*" >&2; }
 die()  { echo "[chunked-sync] FATAL: $*" >&2; exit 1; }
 free_gb() { df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'; }
 
@@ -77,6 +77,10 @@ log "sentinels missing; sync required (disk now: $(free_gb)G free)"
 
 # --- 1. generate rewritten manifest + chunk lists ----------------------------
 MIRROR="${MIRROR:-$(pick_mirror)}" || die "no usable AOSP mirror found"
+case "$MIRROR" in
+  https://*/ ) : ;;
+  * ) die "mirror sanity check failed: '$MIRROR'" ;;
+esac
 log "using mirror: $MIRROR"
 
 rm -rf "$HOME/manifest-src" "$GEN_OUT"

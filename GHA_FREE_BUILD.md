@@ -87,7 +87,8 @@ piped into `zstd -dc | tar -x` — no extra disk. Integrity via `snap.meta`
 | 1-8 | googlesource `android-15.0.0_r1` direct sync | quota (RESOURCE_EXHAUSTED), disk peaks, group-filter and trim-manifest breakage — full history in goal.md Frontier |
 | 9 | mirror rework: LineageOS 22.2 + TUNA rewrite, chunked sync, release-asset snapshot | FAILED at restore (3 min): `gh api` prints the 404 error JSON **on stdout**, so the `RELEASE` existence check saw non-empty `{"message":"Not Found"}` and jq died (`Cannot iterate over null`) — restore step had no snapshot to restore yet. Cascade: sync skipped, collect step failed the job (no out/ + build step skipped). Fixes: existence via `gh release view`; build step gets `id: build`; collect runs only when build wasn't skipped. (Disk verified 145G/121G free after reclaim ✓) |
 | 10 | restore check fixed | FAILED at chunked-sync init (2.5 min): Python closure bug — `default_el` rebound a local inside the nested `load()`, so the generated manifest shipped **without `<default remote="github">`** → repo init: "no remote for project LineageOS/android_build". Mirror probe itself PASSED (TUNA, 4s) and 1098-project/10-chunk generation worked. Fix: `nonlocal default_el` + new validation (manifest without default remote = fatal; every project's remote must resolve). |
-| 11 | nonlocal fix | *pending* |
+| 11 | nonlocal fix | FAILED at chunk 01 sync (3 min): `log()` printed to stdout, so `pick_mirror`'s command substitution captured its own progress line into `MIRROR` — the manifest remote fetch became a garbage multi-line URL. Repo init + googlesource-free guard now PASS. Fix: `log()` → stderr + mirror sanity assert (`https://*/`). |
+| 12 | log-redirect fix | *pending* |
 
 ## Success criterion
 
