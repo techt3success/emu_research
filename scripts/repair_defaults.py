@@ -151,8 +151,8 @@ for rel in VISIBILITY_PUBLIC_DIRS:
         continue
     # delete visibility AND default_visibility declarations entirely —
     # absent = visible everywhere, avoids soong's mixing prohibition
-    t2 = re.sub(r"
-?\s*(?:default_)?visibility:\s*\[[^\]]*\],?", "", t)
+    vis_pat = re.compile(r"\n?\s*(?:default_)?visibility:\s*\[[^\]]*\],?")
+    t2 = vis_pat.sub("", t)
     if t2 != t:
         open(bp, "w", encoding="utf-8").write(t2)
         print(f"visibility relaxed: {rel}")
