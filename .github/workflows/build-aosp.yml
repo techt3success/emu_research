@@ -202,7 +202,7 @@ jobs:
           set -o pipefail
           cd "$HOME/aosp"
           # soong scans ALL Android.bp: drop phone-SoC + known-broken test dirs
-          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive packages/apps/DeviceDiagnostics/TradeInModeTests build/bazel/examples system/netd/tests platform/cts/tests/signature platform/cts/apps platform/cts/tests platform/cts/hostsidetests
+          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive packages/apps/DeviceDiagnostics/TradeInModeTests build/bazel/examples system/netd/tests platform/cts/tests/signature platform/cts/apps platform/cts/tests platform/cts/hostsidetests platform/cts/tools
           rm -rf platform_testing_sts
           # surgical repair of release-config defaults references
           python3 "$GITHUB_WORKSPACE/scripts/repair_defaults.py" 2>&1 | tail -3
