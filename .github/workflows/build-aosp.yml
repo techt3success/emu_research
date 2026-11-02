@@ -131,7 +131,7 @@ jobs:
                  echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0; }
           # extract persisted definers if the main parts lack them
           DEFS_URL=$(grep -P "^definers\.tar\.zst	" /tmp/snap.assets | cut -f2) || true  # grep rc=1 on no-match kills bash -e
-          if [ -n "$DEFS_URL" ] && { [ ! -d "$HOME/aosp/platform/cts" ] || [ ! -d "$HOME/aosp/test/vts-testcase/hal" ]; }; then
+          if [ -n "$DEFS_URL" ] && { [ ! -d "$HOME/aosp/platform/cts" ] || [ ! -d "$HOME/aosp/test/vts-testcase/hal" ] || [ ! -d "$HOME/aosp/test/vts" ] || [ ! -d "$HOME/aosp/test/vts-testcase/vndk" ]; }; then
             echo "extracting persisted definers..."
             gh api "$DEFS_URL" -H "Accept: application/octet-stream" | zstd -dc | tar -xf - -C "$HOME/aosp"               && echo "definers extracted" || echo "WARN: definer extract failed (build step will clone)"
           fi
@@ -225,6 +225,8 @@ jobs:
           }
           clone_definer platform/cts             "-b lineage-22.2 https://github.com/LineageOS/android_cts"             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/cts"             "-b android-15.0.0_r1 https://mirrors.ustc.edu.cn/aosp/platform/cts"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/cts"
           clone_definer test/vts-testcase/hal             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/hal"             "https://mirrors.ustc.edu.cn/aosp/platform/test/vts-testcase/hal"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts-testcase/hal"
+          clone_definer test/vts             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts"             "-b android-15.0.0_r1 https://mirrors.ustc.edu.cn/aosp/platform/test/vts"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts"
+          clone_definer test/vts-testcase/vndk             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/vndk"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts-testcase/vndk"
           if [ ! -d test/vts-testcase/vndk ]; then
             # hal/treble/platform_version references vndk_utils + vts_vndk_utils — defined in the sibling vndk repo
             git clone -q --depth=1 -b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/vndk test/vts-testcase/vndk && echo "vts-testcase/vndk cloned: r1" || { echo "WARN: vndk clone failed — removing dependents"; rm -rf test/vts-testcase/hal/treble/platform_version; }
@@ -233,7 +235,7 @@ jobs:
           if gh release view "$SNAP_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '^definers.tar.zst$'; then
             echo "definers already persisted in snapshot"
           else
-            tar -C "$HOME/aosp" -cf - platform/cts test/vts-testcase/hal 2>/dev/null               | zstd -T0 -3 > /tmp/definers.tar.zst               && gh release upload "$SNAP_TAG" /tmp/definers.tar.zst --clobber               && echo "definers.tar.zst persisted to snapshot" || echo "WARN: definer persist failed (will retry next run)"
+            tar -C "$HOME/aosp" -cf - platform/cts test/vts-testcase/hal test/vts test/vts-testcase/vndk 2>/dev/null               | zstd -T0 -3 > /tmp/definers.tar.zst               && gh release upload "$SNAP_TAG" /tmp/definers.tar.zst --clobber               && echo "definers.tar.zst persisted to snapshot" || echo "WARN: definer persist failed (will retry next run)"
           fi
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
