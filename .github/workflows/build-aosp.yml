@@ -206,6 +206,7 @@ jobs:
           # vendor/qcom/opensource/commonsys-intf/display does not exist").
           # The emulator product never builds them — drop the dirs.
           rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive                  packages/apps/DeviceDiagnostics/TradeInModeTests
+          rm -rf platform_testing_sts   # stray sts-clone dir (collides with tree platform_testing)
           # cts_defaults / cts_error_prone_rules / mts-target-sdk-version-current
           # are DEFINED in platform/cts (trimmed from snapshot). The sweep
           # approach cascaded (swept dirs define other defaults) — restore the
@@ -236,7 +237,6 @@ jobs:
           clone_definer packages/modules/adb             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/modules/adb"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/modules/adb"
           clone_definer packages/modules/Virtualization             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/modules/Virtualization"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/modules/Virtualization"
           clone_definer packages/services/Car             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/services/Car"
-          clone_definer platform_testing_sts             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/platform_testing" 
           # r1 cuttlefish carries two apex/helper dirs whose .bp properties the
           # Lineage 22.2 soong does not know (run-22 lesson) — emulator build
           # never consumes them: drop exactly those dirs
