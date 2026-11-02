@@ -205,7 +205,7 @@ jobs:
           # namespaces from vendor repos we don't ship (run: "namespace
           # vendor/qcom/opensource/commonsys-intf/display does not exist").
           # The emulator product never builds them — drop the dirs.
-          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive                  packages/apps/DeviceDiagnostics/TradeInModeTests
+          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive                  packages/apps/DeviceDiagnostics/TradeInModeTests
           # cts_defaults / cts_error_prone_rules / mts-target-sdk-version-current
           # are DEFINED in platform/cts (trimmed from snapshot). The sweep
           # approach cascaded (swept dirs define other defaults) — restore the
