@@ -138,4 +138,20 @@ for bp in walk_bp(TREE):
         open(bp, "w", encoding="utf-8").write(t)
         total_files += 1
 
+# visibility relaxations: definer-clone consumers need to see these modules
+VISIBILITY_PUBLIC_DIRS = [
+    "external/android-key-attestation",
+]
+for rel in VISIBILITY_PUBLIC_DIRS:
+    bp = os.path.join(TREE, rel, "Android.bp")
+    if not os.path.exists(bp):
+        continue
+    t = open(bp, encoding="utf-8").read()
+    if '"//visibility:public"' in t:
+        continue
+    t2 = t.replace("visibility: [", 'visibility: ["//visibility:public", ', 1)
+    if t2 != t:
+        open(bp, "w", encoding="utf-8").write(t2)
+        print(f"visibility relaxed: {rel}")
+
 print(f"repair_defaults: files={total_files} lines_stripped={total_lines} blocks_deleted={total_blocks}")
