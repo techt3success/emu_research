@@ -103,14 +103,17 @@ for bp in walk_bp(TREE):
         continue
     orig = t
     # 1. line-level strip of broken defaults/dep entries
-    if LINE_KILL:
-        newt = "\n".join(l for l in t.split("\n") if not LINE_KILL.search(l))
-    else:
-        newt = t
-    newt = "\n".join(
-        l for l in newt.split("\n")
-        if not LINE_KILL_VERSIONED.search(l)
-    )
+    #    NEVER strip lines containing 'name:' — orphaning a module breaks soong
+    def _kill(line: str) -> bool:
+        if "name:" in line:
+            return False
+        if LINE_KILL and LINE_KILL.search(line):
+            return True
+        if LINE_KILL_VERSIONED.search(line):
+            return True
+        return False
+
+    newt = "\n".join(l for l in t.split("\n") if not _kill(l))
     killed_lines = newt.count("\n") - t.count("\n")
     t = newt
     if killed_lines:
