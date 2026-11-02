@@ -239,6 +239,19 @@ jobs:
           clone_definer device/google/cuttlefish "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/device/google/cuttlefish"             "-b android-15.0.0_r1 https://android.googlesource.com/device/google/cuttlefish"
           # cuttlefish r1 apex dirs carry props unknown to 22.2 soong
           rm -rf device/google/cuttlefish/system_image device/google/cuttlefish/guest/hals/vehicle/apex device/google/cuttlefish/tests
+          # slim cuttlefish to ONLY what the emulator product needs:
+          # wpa/hostapd driver libs + reference ril (everything else is
+          # cuttlefish-infra that drags recovery/vehicle/graphics deps)
+          CF_KEEP="guest/hals/wpa_supplicant guest/hals/hostapd guest/libs/wpa_supplicant_8_lib guest/hals/ril/reference-libril"
+          rm -rf /tmp/cf_keep && mkdir -p /tmp/cf_keep
+          for k in $CF_KEEP; do
+            [ -d "device/google/cuttlefish/$k" ] && { mkdir -p "/tmp/cf_keep/$(dirname $k)"; cp -r "device/google/cuttlefish/$k" "/tmp/cf_keep/$k"; }
+          done
+          rm -rf device/google/cuttlefish
+          mkdir -p device/google/cuttlefish
+          for k in $CF_KEEP; do
+            [ -d "/tmp/cf_keep/$k" ] && { mkdir -p "device/google/cuttlefish/$(dirname $k)"; cp -r "/tmp/cf_keep/$k" "device/google/cuttlefish/$k"; }
+          done
           # deterministic visibility fix: overwrite with pre-stripped overlay
           cp "$GITHUB_WORKSPACE/scripts/overlay_keyattestation_Android.bp" external/android-key-attestation/Android.bp
           # lunch (3-part release-config first, legacy fallbacks)
