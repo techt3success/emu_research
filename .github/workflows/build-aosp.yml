@@ -46,10 +46,16 @@ jobs:
           sudo rm -rf /usr/local/lib/android /opt/hostedtoolcache /usr/share/dotnet \
                       /usr/local/share/boost /usr/lib/jvm /usr/share/swift \
                       /usr/local/.ghcup /imagepack /mnt /usr/share/miniconda \
-                      /usr/share/az_* /usr/local/lib/node_modules 2>/dev/null
+                      /usr/share/az_* /usr/local/lib/node_modules \
+                      /usr/local/share/powershell /opt/pipx /usr/share/php \
+                      /usr/share/gradle /usr/share/apache-maven* /usr/share/ant \
+                      /opt/containerd /usr/local/tools /usr/local/sbt \
+                      /usr/local/R /usr/share/R /opt/az /usr/share/kotlin \
+                      /usr/share/apache-ant /usr/local/aws-cli 2>/dev/null
           sudo docker image prune -af >/dev/null 2>&1
           sudo apt-get clean
-          df -h /
+          sudo journalctl --vacuum-size=50M >/dev/null 2>&1
+          echo "=== disk after reclaim (BG) ==="; df -BG /
           date +%s > "$HOME/.run_start"
 
       - name: Install build deps + repo tool
@@ -75,6 +81,11 @@ jobs:
         id: restore
         run: |
           set -uo pipefail
+          echo "=== free disk before restore (BG) ==="; df -BG /
+          FREE_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4)}')
+          if [ "${FREE_GB:-0}" -lt 95 ]; then
+            echo "ABORT: only ${FREE_GB}G free — restore needs >=95G"; exit 1
+          fi
           mkdir -p "$HOME/aosp"
           # gh api prints the 404 error JSON on stdout -> use gh release view for existence
           if ! gh release view "$SNAP_TAG" >/dev/null 2>&1; then
