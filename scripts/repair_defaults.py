@@ -161,7 +161,10 @@ for rel in VISIBILITY_PUBLIC_DIRS:
 # product never consumes them, and their cmds reference make-vars that don't
 # exist outside a Lineage kernel environment (run-23/24 lesson)
 DROP_MODULES = {"generated_kernel_includes", "prebuilt_kernel_includes"}
-for bp in walk_bp(TREE):
+# walk_bp skips vendor/ and build/ dirs — process the known glue file explicitly
+_drop_files = list(walk_bp(TREE))
+_drop_files.append(os.path.join(TREE, "vendor", "lineage", "build", "soong", "Android.bp"))
+for bp in _drop_files:
     try:
         t = open(bp, encoding="utf-8", errors="replace").read()
     except OSError:
