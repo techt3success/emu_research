@@ -149,7 +149,8 @@ for rel in VISIBILITY_PUBLIC_DIRS:
     t = open(bp, encoding="utf-8").read()
     if '"//visibility:public"' in t:
         continue
-    t2 = t.replace("visibility: [", 'visibility: ["//visibility:public", ', 1)
+    # replace the whole declaration — soong forbids mixing public with private
+    t2 = re.sub(r"visibility:\s*\[[^\]]*\]", 'visibility: ["//visibility:public"]', t, count=1)
     if t2 != t:
         open(bp, "w", encoding="utf-8").write(t2)
         print(f"visibility relaxed: {rel}")
