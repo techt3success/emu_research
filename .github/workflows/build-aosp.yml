@@ -228,6 +228,8 @@ jobs:
           clone_definer device/google/cuttlefish "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/device/google/cuttlefish"             "-b android-15.0.0_r1 https://android.googlesource.com/device/google/cuttlefish"
           # cuttlefish r1 apex dirs carry props unknown to 22.2 soong
           rm -rf device/google/cuttlefish/system_image device/google/cuttlefish/guest/hals/vehicle/apex device/google/cuttlefish/tests
+          # deterministic visibility fix: overwrite with pre-stripped overlay
+          cp "$GITHUB_WORKSPACE/scripts/overlay_keyattestation_Android.bp" external/android-key-attestation/Android.bp
           # lunch (3-part release-config first, legacy fallbacks)
           source build/envsetup.sh
           TARGET=""
