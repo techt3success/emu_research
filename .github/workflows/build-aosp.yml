@@ -245,6 +245,11 @@ jobs:
           else
             tar -C "$HOME/aosp" -cf - platform/cts test/vts-testcase/hal test/vts test/vts-testcase/vndk device/google/cuttlefish 2>/dev/null               | zstd -T0 -3 > /tmp/definers.tar.zst               && gh release upload "$SNAP_TAG" /tmp/definers.tar.zst --clobber               && echo "definers.tar.zst persisted to snapshot" || echo "WARN: definer persist failed (will retry next run)"
           fi
+          # final sweep AFTER definers are present: any dir still referencing
+          # absent test-modules is a test dir — safe to drop (definers exist now,
+          # so this no longer cascades like the pre-clone sweep did)
+          grep -rl --include=Android.bp --exclude-dir=.repo             -E '"cts_defaults"|"mts-target-sdk-version-current"|"framework-connectivity-test-defaults"|"nfc_aconfig_flags_lib"|"android\.net\.vcn\.flags-aconfig-java"|"compatibility-device-util-axt-ravenwood"|"cts_error_prone_rules"|"trendy_team_' .             | xargs -r -n1 dirname | sort -u | xargs -r rm -rf
+          echo "post-definer sweep done"
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
           if [ "$REMAIN" -lt 4200 ]; then
