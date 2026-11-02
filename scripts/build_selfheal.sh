@@ -5,7 +5,7 @@
 #       generate empty stub defaults -> retry (3 rounds).
 set -o pipefail
 
-ROUND_MAX=12
+ROUND_MAX=30
 STUBS="$HOME/aosp/fortress_stubs"
 mkdir -p "$STUBS"
 if [ ! -s "$STUBS/Android.bp" ]; then
