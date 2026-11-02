@@ -244,6 +244,8 @@ jobs:
           # stubbed. Emulator runs without SIM — acceptable device state.
           rm -rf device/generic/goldfish/radio device/generic/goldfish/phone device/google/cuttlefish/guest/hals/ril
           find device/generic/goldfish -name "*.mk" -exec sed -i -E "/(rild|libgoldfish-rild|libril-modem-lib|libreference-ril|modem_simulator)/d" {} + 2>/dev/null
+          # neutralize Lineage kernel-build glue vars (undefined in sdk_phone builds)
+          sed -i 's/\$(PATH_OVERRIDE_SOONG)//g; s/\$(KERNEL_BUILD_OUT_PREFIX)//g' vendor/lineage/build/soong/Android.bp 2>/dev/null || true
           # slim cuttlefish to ONLY what the emulator product needs:
           # wpa/hostapd driver libs + reference ril (everything else is
           # cuttlefish-infra that drags recovery/vehicle/graphics deps)
