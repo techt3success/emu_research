@@ -231,6 +231,10 @@ jobs:
           # libril-modem-lib (goldfish radio). NOTE: the Lineage BRANCH of this
           # repo has .bp properties newer than 22.2 soong (run-21 lesson) — use r1
           clone_definer device/google/cuttlefish             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/device/google/cuttlefish"             "-b android-15.0.0_r1 https://android.googlesource.com/device/google/cuttlefish"
+          # r1 cuttlefish carries two apex/helper dirs whose .bp properties the
+          # Lineage 22.2 soong does not know (run-22 lesson) — emulator build
+          # never consumes them: drop exactly those dirs
+          rm -rf device/google/cuttlefish/system_image                  device/google/cuttlefish/guest/hals/vehicle/apex
           if [ ! -d test/vts-testcase/vndk ]; then
             # hal/treble/platform_version references vndk_utils + vts_vndk_utils — defined in the sibling vndk repo
             git clone -q --depth=1 -b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/vndk test/vts-testcase/vndk && echo "vts-testcase/vndk cloned: r1" || { echo "WARN: vndk clone failed — removing dependents"; rm -rf test/vts-testcase/hal/treble/platform_version; }
