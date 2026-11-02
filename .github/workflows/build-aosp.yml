@@ -205,7 +205,7 @@ jobs:
           # namespaces from vendor repos we don't ship (run: "namespace
           # vendor/qcom/opensource/commonsys-intf/display does not exist").
           # The emulator product never builds them — drop the dirs.
-          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive                  packages/apps/DeviceDiagnostics/TradeInModeTests
+          rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive                  packages/apps/DeviceDiagnostics/TradeInModeTests \n                 build/bazel/examples system/netd/tests
           rm -rf platform_testing_sts   # stray sts-clone dir (collides with tree platform_testing)
           # cts_defaults / cts_error_prone_rules / mts-target-sdk-version-current
           # are DEFINED in platform/cts (trimmed from snapshot). The sweep
@@ -214,17 +214,31 @@ jobs:
           # showed single-source clones flake) and PERSIST into the rolling snapshot
           clone_definer() {
             local dir="$1"; shift
-            [ -d "$dir" ] && return 0
+            # stale-tooltree refresh: Lineage bundles versions of these repos
+            # that lack r1 modules (libadbd_binary_dependencies, avf flags,
+            # vhalclient_defaults) — replace content with r1 once, keep marker
+            local had_bak=0
+            if [ -d "$dir" ] && [ ! -f "$dir/.r1_pinned" ]; then
+              mv "$dir" "${dir}.orig_bak"; had_bak=1
+            fi
+            if [ -f "$dir/.r1_pinned" ]; then return 0; fi
             local attempt src
             for attempt in 1 2 3; do
               for src in "$@"; do
                 if git clone -q --depth=1 $src "$dir" 2>/dev/null; then
-                  echo "cloned definer: $dir (attempt $attempt)"; return 0
+                  echo "cloned definer: $dir (attempt $attempt)"
+                  touch "$dir/.r1_pinned"
+                  [ "$had_bak" = 1 ] && rm -rf "${dir}.orig_bak"
+                  return 0
                 fi
-                rm -rf "$dir"; sleep 10
+                rm -rf "$dir"
+                [ "$had_bak" = 1 ] && mv "${dir}.orig_bak" "$dir" && had_bak=0
+                sleep 10
               done
             done
-            echo "WARN: all clone attempts failed for $dir"; return 1
+            echo "WARN: all clone attempts failed for $dir"
+            [ "$had_bak" = 1 ] && mv "${dir}.orig_bak" "$dir"
+            return 1
           }
           clone_definer platform/cts             "-b lineage-22.2 https://github.com/LineageOS/android_cts"             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/cts"             "-b android-15.0.0_r1 https://mirrors.ustc.edu.cn/aosp/platform/cts"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/cts"
           clone_definer test/vts-testcase/hal             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/hal"             "https://mirrors.ustc.edu.cn/aosp/platform/test/vts-testcase/hal"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts-testcase/hal"
