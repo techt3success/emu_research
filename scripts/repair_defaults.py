@@ -157,4 +157,29 @@ for rel in VISIBILITY_PUBLIC_DIRS:
         open(bp, "w", encoding="utf-8").write(t2)
         print(f"visibility relaxed: {rel}")
 
+# hard-drop modules that only exist for Lineage kernel builds — the sdk_phone
+# product never consumes them, and their cmds reference make-vars that don't
+# exist outside a Lineage kernel environment (run-23/24 lesson)
+DROP_MODULES = {"generated_kernel_includes", "prebuilt_kernel_includes"}
+for bp in walk_bp(TREE):
+    try:
+        t = open(bp, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    if "generated_kernel_includes" not in t and "prebuilt_kernel_includes" not in t:
+        continue
+    orig = t
+    for target in DROP_MODULES:
+        changed = True
+        while changed:
+            changed = False
+            for start, end in sorted(blocks_with(t, f'name: "{target}"'), reverse=True):
+                t = t[:start].rstrip() + "\n" + t[end:]
+                total_blocks += 1
+                changed = True
+    if t != orig:
+        open(bp, "w", encoding="utf-8").write(t)
+        print(f"dropped kernel-include modules from: {bp}")
+
+
 print(f"repair_defaults: files={total_files} lines_stripped={total_lines} blocks_deleted={total_blocks}")
