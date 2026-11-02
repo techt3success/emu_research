@@ -130,7 +130,7 @@ jobs:
             || { echo "restore failed"; rm -rf "$HOME/aosp";
                  echo "restored=false" >> "$GITHUB_OUTPUT"; exit 0; }
           # extract persisted definers if the main parts lack them
-          DEFS_URL=$(grep -P "^definers\.tar\.zst	" /tmp/snap.assets | cut -f2)
+          DEFS_URL=$(grep -P "^definers\.tar\.zst	" /tmp/snap.assets | cut -f2) || true  # grep rc=1 on no-match kills bash -e
           if [ -n "$DEFS_URL" ] && { [ ! -d "$HOME/aosp/platform/cts" ] || [ ! -d "$HOME/aosp/test/vts-testcase/hal" ]; }; then
             echo "extracting persisted definers..."
             gh api "$DEFS_URL" -H "Accept: application/octet-stream" | zstd -dc | tar -xf - -C "$HOME/aosp"               && echo "definers extracted" || echo "WARN: definer extract failed (build step will clone)"
