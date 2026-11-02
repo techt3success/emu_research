@@ -225,6 +225,10 @@ jobs:
           }
           clone_definer platform/cts             "-b lineage-22.2 https://github.com/LineageOS/android_cts"             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/cts"             "-b android-15.0.0_r1 https://mirrors.ustc.edu.cn/aosp/platform/cts"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/cts"
           clone_definer test/vts-testcase/hal             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/hal"             "https://mirrors.ustc.edu.cn/aosp/platform/test/vts-testcase/hal"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts-testcase/hal"
+          if [ ! -d test/vts-testcase/vndk ]; then
+            # hal/treble/platform_version references vndk_utils + vts_vndk_utils — defined in the sibling vndk repo
+            git clone -q --depth=1 -b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/vndk test/vts-testcase/vndk && echo "vts-testcase/vndk cloned: r1" || { echo "WARN: vndk clone failed — removing dependents"; rm -rf test/vts-testcase/hal/treble/platform_version; }
+          fi
           # persist definers into the rolling snapshot (one-time)
           if gh release view "$SNAP_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '^definers.tar.zst$'; then
             echo "definers already persisted in snapshot"
