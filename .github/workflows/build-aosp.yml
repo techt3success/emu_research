@@ -233,6 +233,10 @@ jobs:
           # libril-modem-lib (goldfish radio). NOTE: the Lineage BRANCH of this
           # repo has .bp properties newer than 22.2 soong (run-21 lesson) — use r1
           clone_definer device/google/cuttlefish             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/device/google/cuttlefish"             "-b android-15.0.0_r1 https://android.googlesource.com/device/google/cuttlefish"
+          clone_definer packages/modules/adb             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/modules/adb"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/modules/adb"
+          clone_definer packages/modules/Virtualization             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/modules/Virtualization"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/modules/Virtualization"
+          clone_definer packages/services/Car             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/packages/services/Car"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/packages/services/Car"
+          clone_definer platform_testing_sts             "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/platform_testing" 
           # r1 cuttlefish carries two apex/helper dirs whose .bp properties the
           # Lineage 22.2 soong does not know (run-22 lesson) — emulator build
           # never consumes them: drop exactly those dirs
@@ -245,15 +249,16 @@ jobs:
           if gh release view "$SNAP_TAG" --json assets --jq '.assets[].name' 2>/dev/null | grep -q '^definers.tar.zst$'; then
             echo "definers already persisted in snapshot"
           else
-            tar -C "$HOME/aosp" -cf - platform/cts test/vts-testcase/hal test/vts test/vts-testcase/vndk device/google/cuttlefish 2>/dev/null               | zstd -T0 -3 > /tmp/definers.tar.zst               && gh release upload "$SNAP_TAG" /tmp/definers.tar.zst --clobber               && echo "definers.tar.zst persisted to snapshot" || echo "WARN: definer persist failed (will retry next run)"
+            tar -C "$HOME/aosp" -cf - platform/cts test/vts-testcase/hal test/vts test/vts-testcase/vndk device/google/cuttlefish packages/modules/adb packages/modules/Virtualization packages/services/Car 2>/dev/null               | zstd -T0 -3 > /tmp/definers.tar.zst               && gh release upload "$SNAP_TAG" /tmp/definers.tar.zst --clobber               && echo "definers.tar.zst persisted to snapshot" || echo "WARN: definer persist failed (will retry next run)"
           fi
           # final sweep AFTER definers are present: any dir still referencing
           # absent test-modules is a test dir — safe to drop (definers exist now,
           # so this no longer cascades like the pre-clone sweep did)
           # sweep ONLY test-support subtrees — unrestricted sweep ate build/soong
-          for _scope in test packages platform_testing device tools; do
+          for _scope in test packages device tools; do   # platform_testing EXCLUDED: defines sts_defaults etc
             grep -rl --include=Android.bp --exclude-dir=.repo             -E '"cts_defaults"|"mts-target-sdk-version-current"|"framework-connectivity-test-defaults"|"nfc_aconfig_flags_lib"|"android\.net\.vcn\.flags-aconfig-java"|"compatibility-device-util-axt-ravenwood"|"cts_error_prone_rules"|"trendy_team_' "$_scope" 2>/dev/null             | xargs -r -n1 dirname | sort -u | xargs -r rm -rf
           done
+          rm -rf frameworks/base/core/tests packages/services/Car/tests
           echo "post-definer sweep done (scoped)"
           START=$(cat "$HOME/.run_start"); NOW=$(date +%s)
           REMAIN=$(( 350*60 - (NOW-START) ))
