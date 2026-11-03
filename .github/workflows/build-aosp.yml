@@ -85,8 +85,8 @@ jobs:
           set -uo pipefail
           echo "=== free disk before restore (BG) ==="; df -BG /
           FREE_GB=$(df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}')
-          if [ "${FREE_GB:-0}" -lt 95 ]; then
-            echo "ABORT: only ${FREE_GB}G free — restore needs >=95G"; exit 1
+          if [ "${FREE_GB:-0}" -lt 20 ]; then
+            echo "ABORT: only ${FREE_GB}G free — minimal tree needs >=20G"; exit 1
           fi
           mkdir -p "$HOME/aosp"
           # gh api prints the 404 error JSON on stdout -> use gh release view for existence
