@@ -242,7 +242,10 @@ jobs:
           # strip the radio/telephony stack from the product: the goldfish ril
           # pulls multi-version aidl conflicts (radio-V3/V4) that cannot be
           # stubbed. Emulator runs without SIM — acceptable device state.
-          rm -rf device/generic/goldfish/radio device/generic/goldfish/phone device/google/cuttlefish/guest/hals/ril
+          # radio stack removed but VINTF manifest fragments are product-required:
+          # delete only build files, keep manifest xmls
+          find device/generic/goldfish/radio device/generic/goldfish/phone -name "Android.bp" -delete 2>/dev/null
+          rm -rf device/generic/goldfish/phone device/google/cuttlefish/guest/hals/ril
           find device/generic/goldfish -name "*.mk" -exec sed -i -E "/(rild|libgoldfish-rild|libril-modem-lib|libreference-ril|modem_simulator)/d" {} + 2>/dev/null
           # neutralize Lineage kernel-build glue vars (undefined in sdk_phone builds)
           sed -i 's/\$(PATH_OVERRIDE_SOONG)//g; s/\$(KERNEL_BUILD_OUT_PREFIX)//g' vendor/lineage/build/soong/Android.bp 2>/dev/null || true
