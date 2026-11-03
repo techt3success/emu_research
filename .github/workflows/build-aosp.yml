@@ -24,7 +24,7 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  SNAP_TAG: src-snap-v1
+  SNAP_TAG: src-snap-v2-minimal
   # run-13 lesson: gh infers the repo from git remotes in cwd — steps running
   # outside a git dir (runner.temp) need this pinned or `gh release` dies with
   # "failed to run git: not a git repository"
