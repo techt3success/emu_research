@@ -80,6 +80,82 @@ TRIM_PREFIXES = [
 ]
 
 # ---------------------------------------------------------------------------
+
+# ---------------------------------------------------------------------------
+# MINIMAL KEEP-SET: whitelist for the emulator-only build. Everything NOT
+# matching these prefixes is dropped (not just trimmed). This cuts the tree
+# from 964 to ~430 projects = ~55% less soong modules = peak RAM ~6-8GB
+# (fits in 16GB) and tree ~35-40GB (fits with out/ on the free runner).
+# ---------------------------------------------------------------------------
+KEEP_PREFIXES = [
+    "build", "prebuilts/", "system/", "bionic", "art", "libcore",
+    "libnativehelper", "bootable/", "frameworks/",
+    "packages/modules/",
+    "packages/apps/Settings", "packages/apps/Launcher3", "packages/apps/Shell",
+    "packages/apps/Camera2", "packages/apps/Gallery2", "packages/apps/Music",
+    "packages/apps/DeskClock", "packages/apps/Calendar", "packages/apps/Contacts",
+    "packages/apps/Bluetooth", "packages/apps/Nfc", "packages/apps/Mms",
+    "packages/apps/Stk", "packages/apps/ThemePicker",
+    "packages/apps/EmergencyInfo", "packages/apps/ExactCalculator",
+    "packages/inputmethods/LatinIME",
+    "packages/providers/", "packages/services/",
+    "device/generic/goldfish", "device/generic/goldfish-opengl",
+    "device/generic/sepolicy", "device/generic/ramdisk",
+    "device/generic/bootloader",
+    "hardware/", "vendor/lineage", "kernel/",
+    "external/boringssl", "external/conscrypt", "external/expat", "external/icu",
+    "external/libxml2", "external/okhttp", "external/zlib", "external/bzip2",
+    "external/selinux", "external/skia", "external/ffmpeg", "external/libpng",
+    "external/freetype", "external/harfbuzz_ng", "external/jpeg",
+    "external/libwebp", "external/minijail", "external/sqlite",
+    "external/libcxx", "external/libcxxabi", "external/jsoncpp",
+    "external/protobuf", "external/fmtlib", "external/libyaml",
+    "external/tinyxml2", "external/lz4", "external/zstd", "external/xz-embedded",
+    "external/e2fsprogs", "external/f2fs-tools", "external/mksh",
+    "external/toybox", "external/libcap", "external/libevent",
+    "external/libldac", "external/libnetutils", "external/ninja",
+    "external/python/cpython3", "external/googletest", "external/golang",
+    "external/libtextclassifier", "external/libphonenumber", "external/libgrpc",
+    "external/libopus", "external/libvpx", "external/libavc",
+    "external/libhevc", "external/libgsm", "external/libmojo", "external/libutf",
+    "external/libdivsufsort", "external/libusb", "external/libnl",
+    "external/libpcap", "external/libsepol", "external/libpcre",
+    "external/libffi", "external/elfutils", "external/fio", "external/flac",
+    "external/flatbuffers", "external/giflib", "external/glslang",
+    "external/gperf", "external/gptfdisk", "external/guava",
+    "external/hsqldb", "external/hyphenation-patterns", "external/iw",
+    "external/jsr305", "external/kmod", "external/lame", "external/libcutils",
+    "external/libdrm", "external/libedit", "external/libexif", "external/libfuse",
+    "external/libjpeg-turbo", "external/libmtp",
+    "external/libnetfilter_conntrack", "external/libnfnetlink", "external/libogg",
+    "external/libpcap", "external/libphonenumber", "external/libscrypt",
+    "external/libselinux", "external/libsync", "external/libtar",
+    "external/libtinyalsa", "external/libtomcrypt", "external/libufdt",
+    "external/libunwind", "external/libunwind_llvm", "external/libutf",
+    "external/libvixl", "external/libvorbis", "external/libvpx",
+    "external/libvterm", "external/libwpa_client", "external/libziparchive",
+    "external/lz4", "external/lzo", "external/mesa3d", "external/minigbm",
+    "external/minijail", "external/mksh", "external/noto-fonts",
+    "external/objenesis", "external/opencv", "external/openssl", "external/opus",
+    "external/pdfium", "external/piex", "external/pigz", "external/puffin",
+    "external/protobuf-c", "external/regex-re2", "external/roboto-fonts",
+    "external/scrypt", "external/selinux", "external/sfntly", "external/skia",
+    "external/speex", "external/sqlite", "external/squashfs-tools",
+    "external/strace", "external/swiftshader", "external/tcpdump",
+    "external/tinyalsa", "external/tinycompress", "external/tinyxml",
+    "external/tinyxml2", "external/tremolo", "external/unicode",
+    "external/v4l2_codec2", "external/vixl", "external/vulkan-headers",
+    "external/wpa_supplicant_8", "external/yaffs2", "external/zipalign",
+    "external/zlib", "external/zstd", "external/deqp",
+    "external/chromium-webview", "external/cronet",
+    "external/google-benchmark", "external/google-breakpad",
+    "external/google-fonts", "external/libglib", "external/libgrpc",
+    "external/libpcap", "external/libsensor",
+    "pdk/", "platform_testing/libraries",
+    "development/", "tools/",
+]
+
+
 # Chunk grouping (first match wins). Dependency-safety order: build system +
 # toolchain prebuilts first (completeness sentinels + early-abort value),
 # core system, sources, packages, device/vendor last.
@@ -202,6 +278,17 @@ def main():
             del projects[path]
     print("trimmed: %d projects, notdefault-grouped: %d -> %d remain" %
           (len(trimmed), len(notdefault), len(projects)))
+
+    # --- MINIMAL KEEP-SET: whitelist filter (drop everything not needed) ------
+    kept, whitelist_dropped = [], []
+    for path in list(projects):
+        if not any(path == k or path.startswith(k + "/") for k in KEEP_PREFIXES):
+            whitelist_dropped.append(path)
+            del projects[path]
+        else:
+            kept.append(path)
+    print("whitelist: %d dropped, %d remain (minimal keep-set)" %
+          (len(whitelist_dropped), len(projects)))
 
     # --- remotes rewrite ------------------------------------------------------
     out_remotes = []
