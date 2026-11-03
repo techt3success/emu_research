@@ -38,7 +38,7 @@ free_gb() { df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'; }
 
 SENTINELS=(
   build/envsetup.sh
-  prebuilts/go/linux-x86/bin/go
+  prebuilts/go/linux-x86
   frameworks/base/Android.bp
   device/generic/goldfish/AndroidProducts.mk
 )
