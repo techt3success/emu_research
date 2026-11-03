@@ -106,7 +106,7 @@ mkdir -p "$AOSP_DIR"
 if [ ! -d "$AOSP_DIR/.repo/manifests" ]; then
   log "repo init from generated local manifest"
   ( cd "$AOSP_DIR" && repo init -u "$GEN_OUT" -b main \
-      --partial-clone --clone-filter=blob:limit=500k --depth=1 \
+      --depth=1 \
       --no-repo-verify --no-use-superproject ) > /tmp/repo-init.log 2>&1 \
     || { tail -20 /tmp/repo-init.log; die "repo init failed"; }
 fi
