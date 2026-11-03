@@ -16,7 +16,7 @@ BUILD_RC=1
 round=1
 while [ "$round" -le "$ROUND_MAX" ]; do
   echo "=== ninja round $round/${ROUND_MAX} ==="
-  m -j4 > build.log 2>&1
+  m -j2 > build.log 2>&1
   BUILD_RC=$?
   if [ "$BUILD_RC" -eq 0 ]; then
     echo "=== BUILD COMPLETE (round $round) ==="
