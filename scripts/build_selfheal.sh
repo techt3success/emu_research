@@ -5,7 +5,7 @@
 #       generate empty stub defaults -> retry (3 rounds).
 set -o pipefail
 
-ROUND_MAX=30
+ROUND_MAX=60
 STUBS="$HOME/aosp/fortress_stubs"
 mkdir -p "$STUBS"
 if [ ! -s "$STUBS/Android.bp" ]; then
@@ -45,6 +45,13 @@ while [ "$round" -le "$ROUND_MAX" ]; do
     echo "stub added: $KIND $M"
     NEW=1
   done <<< "$UNDEFS"
+
+  # persist stubs across runs (runner VMs get evicted mid-parse)
+  if [ "$NEW" -eq 1 ]; then
+    cp "$STUBS/Android.bp" /tmp/fortress_stubs.bp
+    gh release upload "$SNAP_TAG" /tmp/fortress_stubs.bp --clobber >/dev/null 2>&1 \
+      && echo "stubs persisted to snapshot" || true
+  fi
 
   if [ "$NEW" -eq 0 ]; then
     echo "no new stubs generated — stopping loop"

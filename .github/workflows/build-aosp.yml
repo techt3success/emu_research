@@ -146,6 +146,13 @@ jobs:
             echo "extracting persisted definers..."
             gh api "$DEFS_URL" -H "Accept: application/octet-stream" | zstd -dc | tar -xf - -C "$HOME/aosp"               && echo "definers extracted" || echo "WARN: definer extract failed (build step will clone)"
           fi
+          # restore cumulative stubs (fortress_stubs.bp persisted by selfheal loop)
+          STUBS_URL=$(grep -P "^fortress_stubs\.bp	" /tmp/snap.assets | cut -f2) || true
+          if [ -n "$STUBS_URL" ]; then
+            mkdir -p "$HOME/aosp/fortress_stubs"
+            gh api "$STUBS_URL" -H "Accept: application/octet-stream" > "$HOME/aosp/fortress_stubs/Android.bp" 2>/dev/null \
+              && echo "stubs restored from snapshot ($(wc -l < "$HOME/aosp/fortress_stubs/Android.bp") lines)" || true
+          fi
           OK=1
           for p in build/envsetup.sh prebuilts/go/linux-x86/bin/go \
                    frameworks/base/Android.bp \
