@@ -165,6 +165,8 @@ DROP_MODULES = {"generated_kernel_includes", "prebuilt_kernel_includes"}
 _drop_files = list(walk_bp(TREE))
 _drop_files.append(os.path.join(TREE, "vendor", "lineage", "build", "soong", "Android.bp"))
 for bp in _drop_files:
+    if "fortress_stubs" in bp:
+        continue  # stubs file must KEEP its kernel stubs — don't self-sabotage
     try:
         t = open(bp, encoding="utf-8", errors="replace").read()
     except OSError:
