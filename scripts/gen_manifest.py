@@ -279,16 +279,17 @@ def main():
     print("trimmed: %d projects, notdefault-grouped: %d -> %d remain" %
           (len(trimmed), len(notdefault), len(projects)))
 
-    # --- MINIMAL KEEP-SET: whitelist filter (drop everything not needed) ------
-    kept, whitelist_dropped = [], []
-    for path in list(projects):
-        if not any(path == k or path.startswith(k + "/") for k in KEEP_PREFIXES):
-            whitelist_dropped.append(path)
-            del projects[path]
-        else:
-            kept.append(path)
-    print("whitelist: %d dropped, %d remain (minimal keep-set)" %
-          (len(whitelist_dropped), len(projects)))
+    # whitelist DISABLED: the real eviction cause was container-runner migration,
+    # not soong memory. Full trimmed tree works on ubuntu-24.04 (145G/16G VM).
+    # kept, whitelist_dropped = [], []
+    # for path in list(projects):
+    #     if not any(path == k or path.startswith(k + "/") for k in KEEP_PREFIXES):
+    #         whitelist_dropped.append(path)
+    #         del projects[path]
+    #     else:
+    #         kept.append(path)
+    # print("whitelist: %d dropped, %d remain (minimal keep-set)" %
+    #       (len(whitelist_dropped), len(projects)))
 
     # --- remotes rewrite ------------------------------------------------------
     out_remotes = []
