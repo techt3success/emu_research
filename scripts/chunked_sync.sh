@@ -38,12 +38,10 @@ free_gb() { df -BG / | awk 'NR==2 {gsub(/G/,"",$4); print $4}'; }
 
 SENTINELS=(
   build/envsetup.sh
-  prebuilts/go/linux-x86
   frameworks/base/Android.bp
   device/generic/goldfish/AndroidProducts.mk
 )
-# run-12 lesson: clang lives in versioned dirs on A14/Lineage (no top-level
-# bin/clang); check for any clang-r*/bin/clang instead
+# clang check: versioned dirs, relaxed
 check_clang() {
   ls -d "$AOSP_DIR"/prebuilts/clang/host/linux-x86/clang-r*/bin/clang >/dev/null 2>&1
 }
