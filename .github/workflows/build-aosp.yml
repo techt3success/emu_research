@@ -283,7 +283,10 @@ jobs:
             tail -5 lunch.log || true
           done
           [ -n "$TARGET" ] || { echo "NO VALID LUNCH TARGET"; exit 1; }
-          echo "=== BUILD START: $TARGET at $(date -u)"; df -h /
+          # soong JVM heap cap: full-tree analysis OOMs the 16G runner cgroup
+          export _JAVA_OPTIONS="-Xmx4096m -XX:MaxMetaspaceSize=1024m"
+          export SOONG_JAVA_ARGS="-Xmx4096m"
+                    echo "=== BUILD START: $TARGET at $(date -u)"; df -h /
           # self-healing: m -> stub undefined modules -> retry (3 rounds)
           bash "$GITHUB_WORKSPACE/scripts/build_selfheal.sh"
           df -h /
