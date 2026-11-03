@@ -283,8 +283,11 @@ jobs:
           done
           [ -n "$TARGET" ] || { echo "NO VALID LUNCH TARGET"; exit 1; }
           # soong JVM heap cap: full-tree analysis OOMs the 16G runner cgroup
-          export _JAVA_OPTIONS="-Xmx4096m -XX:MaxMetaspaceSize=1024m"
-          export SOONG_JAVA_ARGS="-Xmx4096m"
+          export _JAVA_OPTIONS="-Xmx3072m -XX:MaxMetaspaceSize=768m -XX:+UseSerialGC"
+          export SOONG_JAVA_ARGS="-Xmx3072m"
+          # ninja C++ link memory: limit parallel linker jobs via NINJA_REMOTE? no —
+          # reduce soong_ui parallelism (the multi-JVM fanout is the 14.7G spike)
+          export SOONG_UI_PARALLELISM=2
                     # memory telemetry: sample every 10s so an eviction shows its curve
           ( while true; do echo "[mem] $(date -u +%H:%M:%S) $(free -m | awk 'NR==2{print $3"/"$2"MB used"}')"; sleep 10; done ) &
           MEMPID=$!
