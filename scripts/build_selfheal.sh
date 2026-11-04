@@ -18,6 +18,9 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 ROUND_MAX=60
 CS_SLICE="${CS_SLICE:-1500}"   # seconds per ninja slice (25 min)
+# out/ location honors OUT_DIR (Kaggle kernel keeps out/ on /kaggle/working to
+# dodge the 98GiB overlay quota) — error.log harvest must follow it
+OUT_LOG="${OUT_DIR:-$HOME/aosp/out}/error.log"
 STUBS="$HOME/aosp/fortress_stubs"
 mkdir -p "$STUBS"
 if [ ! -s "$STUBS/Android.bp" ]; then
@@ -64,7 +67,7 @@ while [ "$round" -le "$ROUND_MAX" ]; do
   fi
 
   # harvest undefined-module names from soong's error log
-  UNDEFS=$(grep -hoE 'depends on undefined module "[^"]+"' out/error.log 2>/dev/null \
+  UNDEFS=$(grep -hoE 'depends on undefined module "[^"]+"' "$OUT_LOG" 2>/dev/null \
            | sed 's/.*"\(.*\)"/\1/' | sort -u)
   if [ -z "$UNDEFS" ]; then
     echo "no undefined-module errors — real compile failure, stopping loop"
