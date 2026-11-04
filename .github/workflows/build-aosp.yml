@@ -155,6 +155,19 @@ jobs:
             gh api "$STUBS_URL" -H "Accept: application/octet-stream" > "$HOME/aosp/fortress_stubs/Android.bp" 2>/dev/null \
               && echo "stubs restored from snapshot ($(wc -l < "$HOME/aosp/fortress_stubs/Android.bp") lines)" || true
           fi
+          # restore compiled objects (cs-part-* files) — makes compile additive
+          CS_PARTS=$(grep -cP "^cs-part-" /tmp/snap.assets 2>/dev/null) || true
+          if [ "${CS_PARTS:-0}" -gt 0 ]; then
+            echo "restoring ${CS_PARTS} compile-state parts..."
+            mkdir -p /tmp/cs_restore
+            for part in $(grep -P "^cs-part-" /tmp/snap.assets | cut -f1); do
+              PURL=$(grep -P "^${part}\t" /tmp/snap.assets | cut -f2)
+              gh api "$PURL" -H "Accept: application/octet-stream" > "/tmp/cs_restore/$part" 2>/dev/null
+            done
+            cat /tmp/cs_restore/cs-part-* | zstd -dc | tar -xf - -C "$HOME/aosp" 2>/dev/null \
+              && echo "compile state restored" || echo "WARN: compile state restore failed"
+            rm -rf /tmp/cs_restore
+          fi
           OK=1
           for p in build/envsetup.sh prebuilts/go/linux-x86/bin/go \
                    frameworks/base/Android.bp \
@@ -302,6 +315,32 @@ jobs:
           bash "$GITHUB_WORKSPACE/scripts/build_selfheal.sh"
           kill $MEMPID 2>/dev/null || true
           df -h /
+          # PERSIST COMPILED OBJECTS between runs — makes the compile additive
+          # across connection drops (the last remaining gap: each run was
+          # re-compiling from zero because out/ was never persisted)
+          if [ -d "$HOME/aosp/out" ]; then
+            OUT_SIZE=$(du -sh "$HOME/aosp/out" 2>/dev/null | cut -f1)
+            echo "persisting compiled objects (${OUT_SIZE})..."
+            # tar only the object files + ninja state (not .o.d dependency files
+            # which are huge and regenerable) — cap at 15G to fit the release
+            tar -C "$HOME/aosp" -cf - \
+                --exclude='out/.module_paths' \
+                --exclude='out/soong/.bootstrap' \
+                --exclude='*.d' \
+                out/ 2>/dev/null \
+              | zstd -T0 -3 > /tmp/compile_state.tar.zst
+            CSIZE=$(du -sh /tmp/compile_state.tar.zst | cut -f1)
+            echo "compile state: ${CSIZE} compressed"
+            # split into 1.9G parts for GitHub release upload
+            cd /tmp && split -b 1900M compile_state.tar.zst cs-part-
+            for f in cs-part-*; do
+              gh release upload "$SNAP_TAG" "$f" --clobber >/dev/null 2>&1 \
+                && echo "uploaded $f" || { echo "WARN: $f upload failed"; break; }
+              rm -f "$f"
+            done
+            rm -f /tmp/compile_state.tar.zst
+            echo "compile state persisted"
+          fi
 
       - name: Collect images
         if: always() && steps.build.outcome != 'skipped'
