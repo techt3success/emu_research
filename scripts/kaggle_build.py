@@ -93,7 +93,7 @@ if stage < 3:
         if name.endswith(".zst"):
             run(f"curl -sL '{url}' | zstd -dc | tar -xf - -C {AOSP}", timeout=1800)
         else:
-            os.makedirs(os.path.dirname(dest), exist_ok=True)
+            os.makedirs(dest, exist_ok=True)  # dest IS the dir (fortress_stubs)
             run(f"curl -sL '{url}' > {dest}/Android.bp")
     set_marker("3-restore")
 
