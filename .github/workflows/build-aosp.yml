@@ -155,18 +155,25 @@ jobs:
             gh api "$STUBS_URL" -H "Accept: application/octet-stream" > "$HOME/aosp/fortress_stubs/Android.bp" 2>/dev/null \
               && echo "stubs restored from snapshot ($(wc -l < "$HOME/aosp/fortress_stubs/Android.bp") lines)" || true
           fi
-          # restore compiled objects (cs-part-* files) — makes compile additive
-          CS_PARTS=$(grep -cP "^cs-part-" /tmp/snap.assets 2>/dev/null) || true
-          if [ "${CS_PARTS:-0}" -gt 0 ]; then
-            echo "restoring ${CS_PARTS} compile-state parts..."
-            mkdir -p /tmp/cs_restore
-            for part in $(grep -P "^cs-part-" /tmp/snap.assets | cut -f1); do
-              PURL=$(grep -P "^${part}\t" /tmp/snap.assets | cut -f2)
-              gh api "$PURL" -H "Accept: application/octet-stream" > "/tmp/cs_restore/$part" 2>/dev/null
+          # restore compiled objects — cs<GEN>-part-* DELTA generations from
+          # persist_cs.sh, applied in ascending generation order (tar overlay,
+          # later generations win). Run-28 lesson: a post-build persist never
+          # fires on hard SIGTERM evictions, so checkpoints are banked DURING
+          # the build (every ninja slice); these generations are the restore side.
+          CS_GENS=$(grep -oP '^cs\K[0-9]+(?=-part-)' /tmp/snap.assets 2>/dev/null | sort -n -u) || true
+          if [ -n "${CS_GENS:-}" ]; then
+            for G in $CS_GENS; do
+              NPARTS=$(grep -cP "^cs${G}-part-" /tmp/snap.assets) || true
+              echo "restoring compile-state generation cs${G} (${NPARTS} parts)..."
+              mkdir -p /tmp/cs_restore
+              for part in $(grep -P "^cs${G}-part-" /tmp/snap.assets | cut -f1); do
+                PURL=$(grep -P "^${part}\t" /tmp/snap.assets | cut -f2)
+                gh api "$PURL" -H "Accept: application/octet-stream" > "/tmp/cs_restore/$part" 2>/dev/null
+              done
+              cat /tmp/cs_restore/cs${G}-part-* | zstd -dc | tar -xf - -C "$HOME/aosp" 2>/dev/null \
+                && echo "  cs${G} restored" || echo "WARN: cs${G} restore failed"
+              rm -rf /tmp/cs_restore
             done
-            cat /tmp/cs_restore/cs-part-* | zstd -dc | tar -xf - -C "$HOME/aosp" 2>/dev/null \
-              && echo "compile state restored" || echo "WARN: compile state restore failed"
-            rm -rf /tmp/cs_restore
           fi
           OK=1
           for p in build/envsetup.sh prebuilts/go/linux-x86/bin/go \
@@ -320,31 +327,16 @@ jobs:
           set -e
           kill $MEMPID 2>/dev/null || true
           df -h /
-          # PERSIST COMPILED OBJECTS between runs — makes the compile additive
-          # across runs. Streamed (run-14 pattern: tar | zstd | split --filter
-          # -> gh upload, part deleted after upload) so nothing materializes
-          # in /tmp; out/ can be 40-60G and /tmp cannot hold it.
+          # FINAL compile-state checkpoint — build_selfheal already banks a
+          # delta after EVERY ninja slice (eviction insurance); this pass
+          # catches the tail after the loop exits (success or graceful
+          # failure). Hard SIGTERM evictions skip it — exactly why the
+          # in-build checkpoints exist. Generation scheme in persist_cs.sh:
+          # cs<GEN>-part-* deltas, no purge, restore applies ascending.
           if [ -d "$HOME/aosp/out" ]; then
             OUT_SIZE=$(du -sh "$HOME/aosp/out" 2>/dev/null | cut -f1)
-            echo "persisting compiled objects (${OUT_SIZE})..."
-            # purge stale cs-parts first: restore cats ALL cs-part-* — a smaller
-            # new set mixed with stale larger-set parts = corrupt archive
-            gh api "repos/${{ github.repository }}/releases/tags/$SNAP_TAG" \
-                 --jq '.assets[] | select(.name | startswith("cs-part-")) | .id' \
-              | while read -r AID; do
-                  [ -n "$AID" ] && gh api -X DELETE \
-                    "repos/${{ github.repository }}/releases/assets/$AID" >/dev/null 2>&1 || true
-                done
-            tar -C "$HOME/aosp" \
-                --exclude='out/.module_paths' \
-                --exclude='out/soong/.bootstrap' \
-                --exclude='*.d' \
-                -cf - out/ 2>/dev/null \
-              | zstd -T0 -3 \
-              | split -b 1900M \
-                  --filter='f="$FILE"; cat >"$f" && gh release upload "$SNAP_TAG" "$f" --clobber; rc=$?; rm -f "$f"; exit $rc' \
-                  - cs-part-
-            echo "compile state persisted (build rc was $BUILD_RC)"
+            echo "final compile-state checkpoint (${OUT_SIZE} out/)..."
+            ( cd "$HOME/aosp" && bash "$GITHUB_WORKSPACE/scripts/persist_cs.sh" ) || true
           fi
           df -h /
           exit $BUILD_RC

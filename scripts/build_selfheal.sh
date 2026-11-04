@@ -1,22 +1,62 @@
 #!/usr/bin/env bash
 # build_selfheal.sh — run `m` with automatic stub-generation for undefined modules.
 # Called from the workflow build step; expects cwd=$HOME/aosp and lunch done.
-# Loop: m -> harvest "depends on undefined module" from out/error.log ->
-#       generate empty stub defaults -> retry (3 rounds).
+#
+# Round loop:  m -> harvest "depends on undefined module" from out/error.log ->
+#              generate empty stub defaults -> retry (up to ROUND_MAX).
+# Slice loop (run-28 lesson): `m` runs under `timeout -s INT` in ~25-min
+#   slices; after EVERY slice (and every failed round) persist_delta banks
+#   new out/ objects to the release as a cs<GEN>-part- generation. Ninja is
+#   resumable, so a hard eviction (exit 143 kills the whole step — a
+#   post-build persist can NEVER fire) costs at most one slice instead of
+#   the whole run's compile progress.
 set -o pipefail
 
+# shellcheck source=persist_cs.sh
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+. "$SCRIPT_DIR/persist_cs.sh"
+
 ROUND_MAX=60
+CS_SLICE="${CS_SLICE:-1500}"   # seconds per ninja slice (25 min)
 STUBS="$HOME/aosp/fortress_stubs"
 mkdir -p "$STUBS"
 if [ ! -s "$STUBS/Android.bp" ]; then
   printf '// auto-generated stubs for release-config modules absent in Lineage\n' > "$STUBS/Android.bp"
 fi
 
+# one full build round: sliced m with a checkpoint after every slice.
+# rc 0 = build complete; rc 124 handled inside (slice boundary); any other
+# rc = real error, returned for the stub-harvest path.
+run_round() {
+  local RC=1
+  : > build.log
+  while true; do
+    echo "=== ninja slice (up to $((CS_SLICE/60)) min) at $(date -u +%H:%M:%S) ==="
+    # -s INT lets soong_ui/ninja shut down cleanly; -k 30 KILLs it if it
+    # hangs past the interrupt (soong_ui occasionally ignores INT mid-rust)
+    timeout -s INT -k 30 "$CS_SLICE" m -j2 >> build.log 2>&1
+    RC=$?
+    # bank whatever this slice produced — eviction insurance; failure to
+    # upload must not kill the build (empty delta = cheap no-op)
+    persist_delta || echo "WARN: checkpoint upload failed (continuing build)"
+    if [ "$RC" -eq 0 ]; then
+      return 0
+    fi
+    # 124 = clean slice timeout, 137 = post-INT KILL followup — both are
+    # slice boundaries (ninja resumes from banked objects), NOT failures
+    if [ "$RC" -eq 124 ] || [ "$RC" -eq 137 ]; then
+      echo "slice boundary (rc=$RC) — ninja resumes from banked objects"
+      continue
+    fi
+    return "$RC"
+  done
+}
+
 BUILD_RC=1
 round=1
 while [ "$round" -le "$ROUND_MAX" ]; do
   echo "=== ninja round $round/${ROUND_MAX} ==="
-  m -j2 > build.log 2>&1
+  run_round
   BUILD_RC=$?
   if [ "$BUILD_RC" -eq 0 ]; then
     echo "=== BUILD COMPLETE (round $round) ==="
@@ -37,6 +77,12 @@ while [ "$round" -le "$ROUND_MAX" ]; do
     [ -z "$M" ] && continue
     grep -q "name: \"$M\"" "$STUBS/Android.bp" && continue
     case "$M" in
+      *includes*|*headers*)
+        # kernel glue consumers demand genrule providers ("is not a genrule")
+        printf 'genrule { name: "%s", cmd: "echo stub > $(out)", out: ["%s.out"] }\n' "$M" "$M" >> "$STUBS/Android.bp"
+        echo "stub added: genrule $M"
+        NEW=1
+        continue ;;
       *rust|*_rust)         KIND="rust_defaults" ;;
       *java*|*Test*|*tests*) KIND="java_defaults" ;;
       *)                    KIND="cc_defaults" ;;
