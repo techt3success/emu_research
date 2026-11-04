@@ -25,7 +25,7 @@
 # (runs one persist_delta and exits).
 set -uo pipefail
 
-MARKER="$HOME/aosp/.cs_marker"
+MARKER="${AOSP_DIR:-$HOME/aosp}/.cs_marker"
 
 # newest cs-generation number on the release (0 if none)
 _gen_max() {
@@ -73,7 +73,7 @@ persist_delta() {
 
   GEN=$(( $(_gen_max) + 1 ))
   echo "persist_cs: banking generation cs${GEN} (${NFILES} files)..."
-  tar -C "$HOME/aosp" --null -T /tmp/cs.list \
+  tar -C "${AOSP_DIR:-$HOME/aosp}" --null -T /tmp/cs.list \
       --exclude='out/.module_paths' \
       --exclude='*.d' \
       -cf - 2>/dev/null \
@@ -94,7 +94,7 @@ persist_delta() {
 
 # direct execution: one delta pass
 if [ "${BASH_SOURCE[0]}" = "$0" ]; then
-  cd "$HOME/aosp" || exit 1
+  cd "${AOSP_DIR:-$HOME/aosp}" || exit 1
   persist_delta
   exit $?
 fi

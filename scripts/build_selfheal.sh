@@ -21,7 +21,7 @@ CS_SLICE="${CS_SLICE:-1500}"   # seconds per ninja slice (25 min)
 # out/ location honors OUT_DIR (Kaggle kernel keeps out/ on /kaggle/working to
 # dodge the 98GiB overlay quota) — error.log harvest must follow it
 OUT_LOG="${OUT_DIR:-$HOME/aosp/out}/error.log"
-STUBS="$HOME/aosp/fortress_stubs"
+STUBS="${AOSP_DIR:-$HOME/aosp}/fortress_stubs"
 mkdir -p "$STUBS"
 if [ ! -s "$STUBS/Android.bp" ]; then
   printf '// auto-generated stubs for release-config modules absent in Lineage\n' > "$STUBS/Android.bp"
