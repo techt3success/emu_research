@@ -160,18 +160,34 @@ for rel in VISIBILITY_PUBLIC_DIRS:
 # hard-drop modules that only exist for Lineage kernel builds — the sdk_phone
 # product never consumes them, and their cmds reference make-vars that don't
 # exist outside a Lineage kernel environment (run-23/24 lesson)
-DROP_MODULES = {"generated_kernel_includes", "prebuilt_kernel_includes"}
+# run-27 lesson: dropping only the generator definitions left the two
+# cc_defaults bridges and the three cc_library_headers consumers in the glue
+# file; their quoted refs then resolved against the wrong-typed fortress
+# stubs -> "is not a genrule" parse fatal. Drop the whole chain: generators,
+# bridges, consumers. Then block-delete any OTHER tree module whose text
+# references one of these names (the old line-strip regex was unquoted and
+# never matched the quoted refs; block deletion covers inline arrays and
+# missing trailing commas alike).
+DROP_MODULES = {"generated_kernel_includes", "prebuilt_kernel_includes",
+                "generated_kernel_headers", "prebuilt_kernel_headers",
+                "qti_kernel_headers",
+                "generated_kernel_header_defaults",
+                "prebuilt_kernel_header_defaults"}
+# the 5 names consumers may reference (bridges are never referenced by name)
+KERNEL_REFS = ("generated_kernel_includes", "prebuilt_kernel_includes",
+               "generated_kernel_headers", "prebuilt_kernel_headers",
+               "qti_kernel_headers")
 # walk_bp skips vendor/ and build/ dirs — process the known glue file explicitly
 _drop_files = list(walk_bp(TREE))
 _drop_files.append(os.path.join(TREE, "vendor", "lineage", "build", "soong", "Android.bp"))
 for bp in _drop_files:
     if "fortress_stubs" in bp:
-        continue  # stubs file must KEEP its kernel stubs — don't self-sabotage
+        continue  # stubs file: keep everything (unreferenced stubs are harmless)
     try:
         t = open(bp, encoding="utf-8", errors="replace").read()
     except OSError:
         continue
-    if "generated_kernel_includes" not in t and "prebuilt_kernel_includes" not in t:
+    if not any(f'"{m}"' in t for m in DROP_MODULES):
         continue
     orig = t
     for target in DROP_MODULES:
@@ -179,6 +195,16 @@ for bp in _drop_files:
         while changed:
             changed = False
             for start, end in sorted(blocks_with(t, f'name: "{target}"'), reverse=True):
+                t = t[:start].rstrip() + "\n" + t[end:]
+                total_blocks += 1
+                changed = True
+    # delete every remaining module that references a kernel name (bridges'
+    # generated_headers, stray consumers the product doesn't need)
+    for kn in KERNEL_REFS:
+        changed = True
+        while changed:
+            changed = False
+            for start, end in sorted(blocks_with(t, f'"{kn}"'), reverse=True):
                 t = t[:start].rstrip() + "\n" + t[end:]
                 total_blocks += 1
                 changed = True
