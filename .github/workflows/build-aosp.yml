@@ -314,6 +314,13 @@ jobs:
           # ninja C++ link memory: limit parallel linker jobs via NINJA_REMOTE? no —
           # reduce soong_ui parallelism (the multi-JVM fanout is the 14.7G spike)
           export SOONG_UI_PARALLELISM=2
+          # RUN-32 TRICK: soong_ui is a GO binary — JVM caps never touched its peak
+          # (14.8G/16G = the exit-143 kill line). Go 1.19+ honors GOMEMLIMIT: force
+          # the GC to run harder instead of growing (trades CPU for ceiling), GOGC
+          # doubles down, GOMAXPROCS shrinks per-worker holding memory.
+          export GOMEMLIMIT="${GOMEMLIMIT:-9GiB}"
+          export GOGC="${GOGC:-40}"
+          export GOMAXPROCS="${GOMAXPROCS:-3}"
                     # memory telemetry: sample every 10s so an eviction shows its curve
           ( while true; do echo "[mem] $(date -u +%H:%M:%S) $(free -m | awk 'NR==2{print $3"/"$2"MB used"}')"; sleep 10; done ) &
           MEMPID=$!
