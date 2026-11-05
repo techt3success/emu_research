@@ -17,7 +17,10 @@ SCRIPTS_DIR="${SCRIPTS_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)}"
 cd "$TREE" || exit 1
 
 # soong scans ALL Android.bp: drop phone-SoC + known-broken test dirs
-rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive packages/apps/DeviceDiagnostics/TradeInModeTests build/bazel/examples system/netd/tests external/ltp external/openwrt-prebuilts platform/cts/tests/signature platform/cts/apps platform/cts/tests platform/cts/hostsidetests platform/cts/tools
+# (kaggle-v10 lesson: trusty-host_package references assemble_cvd as a host
+# tool provider — assemble_cvd is deleted by the cuttlefish slim below;
+# emulator product does not need trusty TEE host tools)
+rm -rf hardware/qcom-caf hardware/qcom platform_testing/tools/automotive platform_testing/tests/automotive packages/apps/DeviceDiagnostics/TradeInModeTests build/bazel/examples system/netd/tests external/ltp external/openwrt-prebuilts platform/cts/tests/signature platform/cts/apps platform/cts/tests platform/cts/hostsidetests platform/cts/tools device/generic/trusty
 rm -rf platform_testing_sts
 
 # robust definer clones (cts/hal/vts/vndk usually pre-extracted from defs tar)
