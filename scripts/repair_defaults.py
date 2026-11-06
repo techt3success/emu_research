@@ -213,4 +213,38 @@ for bp in _drop_files:
         print(f"dropped kernel-include modules from: {bp}")
 
 
+# block-delete any module referencing cuttlefish host tools that the
+# cuttlefish slim (tree_prep.sh) deleted — tree_prep keeps only wpa/hostapd
+# libs; every remaining ref (trusty-host_package -> assemble_cvd, kaggle
+# v10/v11 lesson) is a dead dependency of a module the emulator product
+# never needs. Generic pass: kills the WHOLE class instead of one dir/run.
+CF_TOOLS = ("assemble_cvd", "launch_cvd", "stop_cvd", "cvd",
+            "crosvm", "socket_vsock_proxy", "cvd_import_exports")
+for bp in walk_bp(TREE):
+    if "fortress_stubs" in bp:
+        continue
+    if "/cuttlefish/" in bp.replace(os.sep, "/"):
+        continue  # slimmed cuttlefish dirs are already minimal
+    try:
+        t = open(bp, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    if not any(f'"{tl}"' in t for tl in CF_TOOLS):
+        continue
+    orig = t
+    for tl in CF_TOOLS:
+        changed = True
+        while changed:
+            changed = False
+            for start, end in sorted(blocks_with(t, f'"{tl}"'), reverse=True):
+                nm = re.search(r'name:\s*"([^"]+)"', t[start:end])
+                if nm and nm.group(1) not in ("wpa_supplicant", "hostapd", "netd", "adbd"):
+                    t = t[:start].rstrip() + "\n" + t[end:]
+                    total_blocks += 1
+                    changed = True
+    if t != orig:
+        open(bp, "w", encoding="utf-8").write(t)
+        print(f"dropped cuttlefish-tool refs from: {bp}")
+
+
 print(f"repair_defaults: files={total_files} lines_stripped={total_lines} blocks_deleted={total_blocks}")
