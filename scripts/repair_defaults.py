@@ -247,4 +247,40 @@ for bp in walk_bp(TREE):
         print(f"dropped cuttlefish-tool refs from: {bp}")
 
 
+# block-delete any module referencing directories that tree_prep.sh deleted
+# (kaggle-v16 lesson: netd_unit_test -> "source path system/netd/tests does
+# not exist" — same class as the cuttlefish-tool refs, so all tree_prep
+# drop targets are covered here in one pass)
+DEAD_DIRS = ("system/netd/tests", "external/ltp", "external/openwrt-prebuilts",
+             "platform/cts/tests", "platform/cts/apps", "platform/cts/hostsidetests",
+             "platform/cts/tools", "device/generic/trusty",
+             "platform_testing/tools/automotive", "platform_testing/tests/automotive",
+             "build/bazel/examples",
+             "packages/apps/DeviceDiagnostics/TradeInModeTests",
+             "test/vts-testcase/hal/treble", "hardware/qcom", "hardware/qcom-caf")
+for bp in walk_bp(TREE):
+    if "fortress_stubs" in bp:
+        continue
+    try:
+        t = open(bp, encoding="utf-8", errors="replace").read()
+    except OSError:
+        continue
+    if not any(dd in t for dd in DEAD_DIRS):
+        continue
+    orig = t
+    for dd in DEAD_DIRS:
+        changed = True
+        while changed:
+            changed = False
+            for start, end in sorted(blocks_with(t, dd), reverse=True):
+                nm = re.search(r'name:\s*"([^"]+)"', t[start:end])
+                if nm and nm.group(1) not in ("wpa_supplicant", "hostapd", "netd", "adbd"):
+                    t = t[:start].rstrip() + "\n" + t[end:]
+                    total_blocks += 1
+                    changed = True
+    if t != orig:
+        open(bp, "w", encoding="utf-8").write(t)
+        print(f"dropped dead-dir refs from: {bp}")
+
+
 print(f"repair_defaults: files={total_files} lines_stripped={total_lines} blocks_deleted={total_blocks}")
