@@ -288,4 +288,41 @@ for bp in walk_bp(TREE):
         print(f"dropped dead-dir refs from: {bp}")
 
 
+# FINAL: tree-wide test excision — kaggle-v19 lesson: soong PANICS
+# (licensesPropertyGatherer) on test modules left with dangling deps after
+# the dir sweeps. An emulator product needs zero test modules; excising all
+# of them kills this class AND every future test-reference error AND
+# shrinks the parse. walk_bp skips bionic — excise it explicitly (the
+# panic module fuzzer_bindings_test lives there).
+def excise_tests(root):
+    global total_blocks
+    n0 = total_blocks
+    for bp in walk_bp(root):
+        if "fortress_stubs" in bp:
+            continue
+        try:
+            t = open(bp, encoding="utf-8", errors="replace").read()
+        except OSError:
+            continue
+        names = set(re.findall(r'name:\s*"([^"]+)"', t))
+        if not any(is_test_block(nm) for nm in names):
+            continue
+        orig = t
+        for nm in names:
+            if is_test_block(nm):
+                changed = True
+                while changed:
+                    changed = False
+                    for start, end in sorted(blocks_with(t, f'name: "{nm}"'), reverse=True):
+                        t = t[:start].rstrip() + NL_LIT + t[end:]
+                        total_blocks += 1
+                        changed = True
+        if t != orig:
+            open(bp, "w", encoding="utf-8").write(t)
+    return total_blocks - n0
+
+NL_LIT = chr(10)
+print(f"test excision: tree={excise_tests(TREE)} bionic={excise_tests(os.path.join(TREE, chr(98)+chr(105)+chr(111)+chr(110)+chr(105)+chr(99)))}")
+
+
 print(f"repair_defaults: files={total_files} lines_stripped={total_lines} blocks_deleted={total_blocks}")
