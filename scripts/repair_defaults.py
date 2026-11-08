@@ -257,7 +257,12 @@ DEAD_DIRS = ("system/netd/tests", "external/ltp", "external/openwrt-prebuilts",
              "platform_testing/tools/automotive", "platform_testing/tests/automotive",
              "build/bazel/examples",
              "packages/apps/DeviceDiagnostics/TradeInModeTests",
-             "test/vts-testcase/hal/treble", "hardware/qcom", "hardware/qcom-caf")
+             "test/vts-testcase/hal/treble", "hardware/qcom", "hardware/qcom-caf",
+             # cts test infra the trimmed tree no longer builds (kaggle-v17:
+             # aidl_test_java_* -> cts-dalvik-device-test-runner not a
+             # SourceFileProducer) — plain substring refs, same pass
+             "cts-dalvik-device-test-runner", "cts-tradefed", "cts_stub_defaults",
+             "CtsDeviceDeviceInfo", "compatibility-device-util")
 for bp in walk_bp(TREE):
     if "fortress_stubs" in bp:
         continue
