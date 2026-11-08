@@ -43,6 +43,12 @@ clone_definer test/vts-testcase/hal    "-b android-15.0.0_r1 https://mirrors.tun
 clone_definer test/vts                 "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts"
 clone_definer test/vts-testcase/vndk   "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/platform/test/vts-testcase/vndk"             "-b android-15.0.0_r1 https://android.googlesource.com/platform/test/vts-testcase/vndk"
 clone_definer device/google/cuttlefish "-b android-15.0.0_r1 https://mirrors.tuna.tsinghua.edu.cn/git/AOSP/device/google/cuttlefish"             "-b android-15.0.0_r1 https://android.googlesource.com/device/google/cuttlefish"
+# mainline module repos carry their own cts/test suites referencing cts
+# infra the trimmed tree no longer builds (kaggle-v18: CtsPermissionTestCases
+# in packages/modules/Permission) — sweep every tests dir under packages/modules
+find packages/modules -type d -name "tests" -prune -exec rm -rf {} + 2>/dev/null
+find packages/modules -type d -name "test" -prune -exec rm -rf {} + 2>/dev/null
+find packages/modules -maxdepth 2 -type d -name "tests" -exec rm -rf {} + 2>/dev/null
 # cuttlefish r1 apex dirs carry props unknown to 22.2 soong
 rm -rf device/google/cuttlefish/system_image device/google/cuttlefish/guest/hals/vehicle/apex device/google/cuttlefish/tests
 # cloned definer repos: strip their BULK test subtrees (soong scans
